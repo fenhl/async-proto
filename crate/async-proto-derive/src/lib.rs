@@ -37,8 +37,10 @@ fn read_fields(sync: bool, read_error: &Ident, read_error_variants: &mut Vec<pro
                 .enumerate()
                 .map(|(idx, Field { ty, .. })| {
                     let variant_name = Ident::new(&format!("{}Field{}", var.map(|var| var.to_string()).unwrap_or_default(), idx), Span::call_site());
-                    read_error_variants.push(quote!(#variant_name(<#ty as ::async_proto::Protocol>::ReadError)));
-                    read_error_display_arms.push(quote!(#read_error::#variant_name(e) => e.fmt(f)));
+                    if !sync {
+                        read_error_variants.push(quote!(#variant_name(<#ty as ::async_proto::Protocol>::ReadError)));
+                        read_error_display_arms.push(quote!(#read_error::#variant_name(e) => e.fmt(f)));
+                    }
                     quote!(<#ty as ::async_proto::Protocol>#read)
                 })
                 .collect_vec();
@@ -48,8 +50,10 @@ fn read_fields(sync: bool, read_error: &Ident, read_error_variants: &mut Vec<pro
             let read_fields = named.iter()
                 .map(|Field { ident, ty, .. }| {
                     let variant_name = Ident::new(&format!("{}{}", var.map(|var| var.to_string()).unwrap_or_default(), ident.as_ref().expect("missing ident in named field").to_string().to_case(Case::Pascal)), Span::call_site());
-                    read_error_variants.push(quote!(#variant_name(<#ty as ::async_proto::Protocol>::ReadError)));
-                    read_error_display_arms.push(quote!(#read_error::#variant_name(e) => e.fmt(f)));
+                    if !sync {
+                        read_error_variants.push(quote!(#variant_name(<#ty as ::async_proto::Protocol>::ReadError)));
+                        read_error_display_arms.push(quote!(#read_error::#variant_name(e) => e.fmt(f)));
+                    }
                     quote!(#ident: <#ty as ::async_proto::Protocol>#read)
                 })
                 .collect_vec();
