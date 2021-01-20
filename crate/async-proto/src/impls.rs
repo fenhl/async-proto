@@ -1,13 +1,20 @@
 //! [`Protocol`] implementations for primitive and [`std`] types.
 
+#![allow(missing_docs)]
+
 use {
     std::{
+        collections::{
+            BTreeMap,
+            HashMap,
+        },
         convert::{
             TryFrom as _,
             TryInto as _,
         },
         fmt,
         future::Future,
+        hash::Hash,
         io,
         pin::Pin,
         string::FromUtf8Error,
@@ -73,7 +80,6 @@ impl_protocol_primitive!(u128, read_u128, write_u128, NetworkEndian);
 impl_protocol_primitive!(i128, read_i128, write_i128, NetworkEndian);
 
 #[derive(Debug, From)]
-#[allow(missing_docs)]
 pub enum BoolReadError {
     InvalidValue(u8),
     #[from]
@@ -124,7 +130,6 @@ impl Protocol for bool {
 }
 
 #[derive(Debug)]
-#[allow(missing_docs)]
 pub enum OptionReadError<T: Protocol> {
     Variant(BoolReadError),
     Content(T::ReadError),
@@ -187,7 +192,6 @@ impl<T: Protocol + Sync> Protocol for Option<T> {
 }
 
 #[derive(Debug)]
-#[allow(missing_docs)]
 pub enum VecReadError<T: Protocol> {
     Elt(T::ReadError),
     Io(io::Error),
@@ -208,7 +212,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<Vec<T>, VecReadError<T>>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u32::read(&mut stream).await.map_err(VecReadError::Io)?;
+            let len = u64::read(&mut stream).await.map_err(VecReadError::Io)?;
             let mut buf = Vec::with_capacity(len.try_into().expect("tried to read vector longer than usize::MAX"));
             for _ in 0..len {
                 buf.push(T::read(&mut stream).await.map_err(VecReadError::Elt)?);
@@ -219,7 +223,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            u32::try_from(self.len()).expect("vector was longer than u32::MAX").write(&mut sink).await?;
+            u64::try_from(self.len()).expect("vector was longer than u64::MAX").write(&mut sink).await?;
             for elt in self {
                 elt.write(&mut sink).await?;
             }
@@ -229,7 +233,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     #[cfg(feature = "blocking")]
     fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<Vec<T>, VecReadError<T>> {
-        let len = u32::read_sync(&mut stream).map_err(VecReadError::Io)?;
+        let len = u64::read_sync(&mut stream).map_err(VecReadError::Io)?;
         let mut buf = Vec::with_capacity(len.try_into().expect("tried to read vector longer than usize::MAX"));
         for _ in 0..len {
             buf.push(T::read_sync(&mut stream).map_err(VecReadError::Elt)?);
@@ -239,7 +243,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     #[cfg(feature = "blocking")]
     fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
-        u32::try_from(self.len()).expect("vector was longer than u32::MAX").write_sync(&mut sink)?;
+        u64::try_from(self.len()).expect("vector was longer than u32::MAX").write_sync(&mut sink)?;
         for elt in self {
             elt.write_sync(&mut sink)?;
         }
@@ -248,7 +252,6 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 }
 
 #[derive(Debug, From)]
-#[allow(missing_docs)]
 pub enum StringReadError {
     Utf8(FromUtf8Error),
     Vec(VecReadError<u8>),
@@ -291,6 +294,118 @@ impl Protocol for String {
     fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
         u32::try_from(self.len()).expect("string was longer than u32::MAX bytes").write_sync(&mut sink)?;
         sink.write(self.as_bytes())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum MapReadError<K: Protocol, V: Protocol> {
+    Io(io::Error),
+    Key(K::ReadError),
+    Value(V::ReadError),
+}
+
+impl<K: Protocol, V: Protocol> fmt::Display for MapReadError<K, V>
+where K::ReadError: fmt::Display, V::ReadError: fmt::Display {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MapReadError::Io(e) => write!(f, "I/O error: {}", e),
+            MapReadError::Key(e) => e.fmt(f),
+            MapReadError::Value(e) => e.fmt(f),
+        }
+    }
+}
+
+impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'static> Protocol for BTreeMap<K, V>
+where K::ReadError: Send, V::ReadError: Send {
+    type ReadError = MapReadError<K, V>;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<BTreeMap<K, V>, MapReadError<K, V>>> + Send + 'a>> {
+        Box::pin(async move {
+            let len = u64::read(&mut stream).await.map_err(MapReadError::Io)?;
+            let mut map = BTreeMap::default();
+            for _ in 0..len {
+                map.insert(K::read(&mut stream).await.map_err(MapReadError::Key)?, V::read(&mut stream).await.map_err(MapReadError::Value)?);
+            }
+            Ok(map)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            u64::try_from(self.len()).expect("map was longer than u64::MAX").write(&mut sink).await?;
+            for (k, v) in self {
+                k.write(&mut sink).await?;
+                v.write(&mut sink).await?;
+            }
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<BTreeMap<K, V>, MapReadError<K, V>> {
+        let len = u64::read_sync(&mut stream).map_err(MapReadError::Io)?;
+        let mut map = BTreeMap::default();
+        for _ in 0..len {
+            map.insert(K::read_sync(&mut stream).map_err(MapReadError::Key)?, V::read_sync(&mut stream).map_err(MapReadError::Value)?);
+        }
+        Ok(map)
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+        u64::try_from(self.len()).expect("map was longer than u64::MAX").write_sync(&mut sink)?;
+        for (k, v) in self {
+            k.write_sync(&mut sink)?;
+            v.write_sync(&mut sink)?;
+        }
+        Ok(())
+    }
+}
+
+impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol for HashMap<K, V>
+where K::ReadError: Send, V::ReadError: Send {
+    type ReadError = MapReadError<K, V>;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<HashMap<K, V>, MapReadError<K, V>>> + Send + 'a>> {
+        Box::pin(async move {
+            let len = u64::read(&mut stream).await.map_err(MapReadError::Io)?;
+            let mut map = HashMap::with_capacity(len.try_into().expect("tried to read map longer than usize::MAX"));
+            for _ in 0..len {
+                map.insert(K::read(&mut stream).await.map_err(MapReadError::Key)?, V::read(&mut stream).await.map_err(MapReadError::Value)?);
+            }
+            Ok(map)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            u64::try_from(self.len()).expect("map was longer than u64::MAX").write(&mut sink).await?;
+            for (k, v) in self {
+                k.write(&mut sink).await?;
+                v.write(&mut sink).await?;
+            }
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<HashMap<K, V>, MapReadError<K, V>> {
+        let len = u64::read_sync(&mut stream).map_err(MapReadError::Io)?;
+        let mut map = HashMap::with_capacity(len.try_into().expect("tried to read map longer than usize::MAX"));
+        for _ in 0..len {
+            map.insert(K::read_sync(&mut stream).map_err(MapReadError::Key)?, V::read_sync(&mut stream).map_err(MapReadError::Value)?);
+        }
+        Ok(map)
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+        u64::try_from(self.len()).expect("map was longer than u64::MAX").write_sync(&mut sink)?;
+        for (k, v) in self {
+            k.write_sync(&mut sink)?;
+            v.write_sync(&mut sink)?;
+        }
         Ok(())
     }
 }
