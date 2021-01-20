@@ -29,7 +29,7 @@ use {
 };
 
 fn read_fields(sync: bool, read_error: &Ident, read_error_variants: &mut Vec<proc_macro2::TokenStream>, read_error_display_arms: &mut Vec<proc_macro2::TokenStream>, var: Option<&Ident>, fields: &Fields) -> proc_macro2::TokenStream {
-    let read = if sync { quote!(::read_sync(stream)?) } else { quote!(::read(stream).await?) };
+    let read = if sync { quote!(::read_sync(&mut stream)) } else { quote!(::read(&mut stream).await) };
     match fields {
         Fields::Unit => quote!(),
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
@@ -41,7 +41,7 @@ fn read_fields(sync: bool, read_error: &Ident, read_error_variants: &mut Vec<pro
                         read_error_variants.push(quote!(#variant_name(<#ty as ::async_proto::Protocol>::ReadError)));
                         read_error_display_arms.push(quote!(#read_error::#variant_name(e) => e.fmt(f)));
                     }
-                    quote!(<#ty as ::async_proto::Protocol>#read)
+                    quote!(<#ty as ::async_proto::Protocol>#read.map_err(#read_error::#variant_name)?)
                 })
                 .collect_vec();
             quote!((#(#read_fields,)*))
@@ -54,7 +54,7 @@ fn read_fields(sync: bool, read_error: &Ident, read_error_variants: &mut Vec<pro
                         read_error_variants.push(quote!(#variant_name(<#ty as ::async_proto::Protocol>::ReadError)));
                         read_error_display_arms.push(quote!(#read_error::#variant_name(e) => e.fmt(f)));
                     }
-                    quote!(#ident: <#ty as ::async_proto::Protocol>#read)
+                    quote!(#ident: <#ty as ::async_proto::Protocol>#read.map_err(#read_error::#variant_name)?)
                 })
                 .collect_vec();
             quote!({ #(#read_fields,)* })
@@ -62,8 +62,27 @@ fn read_fields(sync: bool, read_error: &Ident, read_error_variants: &mut Vec<pro
     }
 }
 
+fn fields_pat(fields: &Fields) -> proc_macro2::TokenStream {
+    match fields {
+        Fields::Unit => quote!(),
+        Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
+            let field_idents = unnamed.iter()
+                .enumerate()
+                .map(|(idx, _)| Ident::new(&format!("__field{}", idx), Span::call_site()))
+                .collect_vec();
+            quote!((#(#field_idents,)*))
+        }
+        Fields::Named(FieldsNamed { named, .. }) => {
+            let field_idents = named.iter()
+                .map(|Field { ident, .. }| ident)
+                .collect_vec();
+            quote!({ #(#field_idents,)* })
+        }
+    }
+}
+
 fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
-    let write = if sync { quote!(.write_sync(sink)?) } else { quote!(.write(sink).await?) };
+    let write = if sync { quote!(.write_sync(&mut sink)?) } else { quote!(.write(&mut sink).await?) };
     match fields {
         Fields::Unit => quote!(),
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
@@ -102,10 +121,11 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
 #[proc_macro_derive(Protocol)]
 pub fn derive_protocol(input: TokenStream) -> TokenStream {
     let DeriveInput { ident: ty, generics, data, .. } = parse_macro_input!(input as DeriveInput);
-    if generics.lt_token.is_some() || generics.where_clause.is_some() { return quote!(compile_error!("generics not supported in derive(Protocol)")).into() }
+    if generics.lt_token.is_some() || generics.where_clause.is_some() { return quote!(compile_error!("generics not supported in derive(Protocol)")).into() } //TODO
     let read_error = Ident::new(&format!("{}ReadError", ty), Span::call_site());
     let (read_error_variants, read_error_display_arms, impl_read, impl_write, impl_read_sync, impl_write_sync) = match data {
         Data::Struct(DataStruct { fields, .. }) => {
+            let fields_pat = fields_pat(&fields);
             let mut read_error_variants = Vec::default();
             let mut read_error_display_arms = Vec::default();
             let read_fields_async = read_fields(false, &read_error, &mut read_error_variants, &mut read_error_display_arms, None, &fields);
@@ -117,11 +137,13 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
                 read_error_display_arms,
                 quote!(::core::result::Result::Ok(#ty #read_fields_async)),
                 quote! {
+                    let #ty #fields_pat = self;
                     #write_fields_async
                     ::core::result::Result::Ok(())
                 },
                 quote!(::core::result::Result::Ok(#ty #read_fields_sync)),
                 quote! {
+                    let #ty #fields_pat = self;
                     #write_fields_sync
                     ::core::result::Result::Ok(())
                 },
@@ -142,10 +164,11 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
                 .enumerate()
                 .map(|(idx, Variant { ident: var, fields, .. })| {
                     let idx = u8::try_from(idx).expect("Protocol can't be derived for enums with more than u8::MAX variants");
+                    let fields_pat = fields_pat(&fields);
                     let write_fields = write_fields(false, fields);
                     quote! {
-                        #ty::#var => {
-                            #idx.write(sink).await?;
+                        #ty::#var #fields_pat => {
+                            #idx.write(&mut sink).await?;
                             #write_fields
                         }
                     }
@@ -163,10 +186,11 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
                 .enumerate()
                 .map(|(idx, Variant { ident: var, fields, .. })| {
                     let idx = u8::try_from(idx).expect("Protocol can't be derived for enums with more than u8::MAX variants");
+                    let fields_pat = fields_pat(&fields);
                     let write_fields = write_fields(true, fields);
                     quote! {
-                        #ty::#var => {
-                            #idx.write(sink).await?;
+                        #ty::#var #fields_pat => {
+                            #idx.write_sync(&mut sink)?;
                             #write_fields
                         }
                     }
@@ -176,7 +200,7 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
                 read_error_variants,
                 read_error_display_arms,
                 quote! {
-                    match <u8 as ::async_proto::Protocol>::read(stream).await? {
+                    match <u8 as ::async_proto::Protocol>::read(&mut stream).await.map_err(#read_error::Io)? {
                         #(#read_arms,)*
                         n => ::core::result::Result::Err(#read_error::UnknownVariant(n)),
                     }
@@ -188,7 +212,7 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
                     ::core::result::Result::Ok(())
                 },
                 quote! {
-                    match <u8 as ::async_proto::Protocol>::read_sync(stream)? {
+                    match <u8 as ::async_proto::Protocol>::read_sync(&mut stream).map_err(#read_error::Io)? {
                         #(#read_sync_arms,)*
                         n => ::core::result::Result::Err(#read_error::UnknownVariant(n)),
                     }
@@ -204,7 +228,7 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
         Data::Union(_) => return quote!(compile_error!("unions not supported in derive(Protocol)")).into(),
     };
     TokenStream::from(quote! {
-        #[derive(Debug, ::async_proto::derive_more::From)]
+        #[derive(Debug)]
         pub enum #read_error {
             Io(::std::io::Error),
             #(#read_error_variants,)*
@@ -219,15 +243,19 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
             }
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
-        #[::async_proto::async_trait::async_trait]
         impl ::async_proto::Protocol for #ty {
             type ReadError = #read_error;
 
-            async fn read<'a, R: ::async_proto::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: R) -> Result<#ty, #read_error> { #impl_read }
-            async fn write<'a, W: ::async_proto::tokio::io::AsyncWrite + ::core::marker::Unpin + ::core::marker::Send + 'a>(&'a self, sink: W) -> ::std::io::Result<()> { #impl_write }
-            fn read_sync<'a>(stream: impl ::std::io::Read + 'a) -> Result<Self, Self::ReadError> { #impl_read_sync }
-            fn write_sync<'a>(&'a self, sink: impl ::std::io::Write + 'a) -> ::std::io::Result<()> { #impl_write_sync }
+            fn read<'a, R: ::async_proto::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(mut stream: R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<#ty, #read_error>> + ::core::marker::Send + 'a>> {
+                ::std::boxed::Box::pin(async move { #impl_read })
+            }
+
+            fn write<'a, W: ::async_proto::tokio::io::AsyncWrite + ::core::marker::Unpin + ::core::marker::Send + 'a>(&'a self, mut sink: W) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::std::io::Result<()>> + ::core::marker::Send + 'a>> {
+                ::std::boxed::Box::pin(async move { #impl_write })
+            }
+
+            #[cfg(feature = "blocking")] fn read_sync<'a>(mut stream: impl ::std::io::Read + 'a) -> Result<Self, Self::ReadError> { #impl_read_sync }
+            #[cfg(feature = "blocking")] fn write_sync<'a>(&self, mut sink: impl ::std::io::Write + 'a) -> ::std::io::Result<()> { #impl_write_sync }
         }
     })
 }
