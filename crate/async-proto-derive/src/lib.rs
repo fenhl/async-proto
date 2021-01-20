@@ -227,6 +227,14 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
         }
         Data::Union(_) => return quote!(compile_error!("unions not supported in derive(Protocol)")).into(),
     };
+    let blocking_impls = if cfg!(feature = "blocking") {
+        quote! {
+            fn read_sync<'a>(mut stream: impl ::std::io::Read + 'a) -> Result<Self, Self::ReadError> { #impl_read_sync }
+            fn write_sync<'a>(&self, mut sink: impl ::std::io::Write + 'a) -> ::std::io::Result<()> { #impl_write_sync }
+        }
+    } else {
+        quote!()
+    };
     TokenStream::from(quote! {
         #[derive(Debug)]
         pub enum #read_error {
@@ -254,8 +262,7 @@ pub fn derive_protocol(input: TokenStream) -> TokenStream {
                 ::std::boxed::Box::pin(async move { #impl_write })
             }
 
-            #[cfg(feature = "blocking")] fn read_sync<'a>(mut stream: impl ::std::io::Read + 'a) -> Result<Self, Self::ReadError> { #impl_read_sync }
-            #[cfg(feature = "blocking")] fn write_sync<'a>(&self, mut sink: impl ::std::io::Write + 'a) -> ::std::io::Result<()> { #impl_write_sync }
+            #blocking_impls
         }
     })
 }
