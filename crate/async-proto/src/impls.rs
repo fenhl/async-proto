@@ -9,6 +9,7 @@ use {
             HashMap,
         },
         convert::{
+            Infallible as Never,
             TryFrom as _,
             TryInto as _,
         },
@@ -78,6 +79,108 @@ impl_protocol_primitive!(u64, read_u64, write_u64, NetworkEndian);
 impl_protocol_primitive!(i64, read_i64, write_i64, NetworkEndian);
 impl_protocol_primitive!(u128, read_u128, write_u128, NetworkEndian);
 impl_protocol_primitive!(i128, read_i128, write_i128, NetworkEndian);
+
+macro_rules! impl_protocol_tuple {
+    ($read_err:ident, $($ty:ident),+) => {
+        #[derive(Debug)]
+        pub enum $read_err<$($ty: Protocol),+> {
+            $(
+                $ty($ty::ReadError),
+            )+
+        }
+
+        impl<$($ty: Protocol),+> fmt::Display for $read_err<$($ty),+>
+        where $($ty::ReadError: fmt::Display),+ {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(
+                        $read_err::$ty(e) => e.fmt(f),
+                    )+
+                }
+            }
+        }
+
+        impl<$($ty: Protocol + Send + Sync),+> Protocol for ($($ty,)+)
+        where $($ty::ReadError: Send),+ {
+            type ReadError = $read_err<$($ty),+>;
+
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<($($ty,)+), $read_err<$($ty),+>>> + Send + 'a>> {
+                Box::pin(async move {
+                    Ok((
+                        $($ty::read(&mut stream).await.map_err($read_err::$ty)?,)+
+                    ))
+                })
+            }
+
+            #[allow(non_snake_case)]
+            fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+                Box::pin(async move {
+                    let ($($ty,)+) = self;
+                    $(
+                        $ty.write(&mut sink).await?;
+                    )+
+                    Ok(())
+                })
+            }
+
+            #[cfg(feature = "blocking")]
+            fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<($($ty,)+), $read_err<$($ty),+>> {
+                Ok((
+                    $($ty::read_sync(&mut stream).map_err($read_err::$ty)?,)+
+                ))
+            }
+
+            #[cfg(feature = "blocking")]
+            #[allow(non_snake_case)]
+            fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+                let ($($ty,)+) = self;
+                $(
+                    $ty.write_sync(&mut sink)?;
+                )+
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_protocol_tuple!(Tuple1ReadError, A);
+impl_protocol_tuple!(Tuple2ReadError, A, B);
+impl_protocol_tuple!(Tuple3ReadError, A, B, C);
+impl_protocol_tuple!(Tuple4ReadError, A, B, C, D);
+impl_protocol_tuple!(Tuple5ReadError, A, B, C, D, E);
+impl_protocol_tuple!(Tuple6ReadError, A, B, C, D, E, F);
+impl_protocol_tuple!(Tuple7ReadError, A, B, C, D, E, F, G);
+impl_protocol_tuple!(Tuple8ReadError, A, B, C, D, E, F, G, H);
+impl_protocol_tuple!(Tuple9ReadError, A, B, C, D, E, F, G, H, I);
+impl_protocol_tuple!(Tuple10ReadError, A, B, C, D, E, F, G, H, I, J);
+impl_protocol_tuple!(Tuple11ReadError, A, B, C, D, E, F, G, H, I, J, K);
+impl_protocol_tuple!(Tuple12ReadError, A, B, C, D, E, F, G, H, I, J, K, L);
+
+impl Protocol for () {
+    type ReadError = Never;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(_: R) -> Pin<Box<dyn Future<Output = Result<(), Never>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(())
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, _: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(_: impl Read + 'a) -> Result<(), Never> {
+        Ok(())
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, _: impl Write + 'a) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 #[derive(Debug, From)]
 pub enum BoolReadError {
