@@ -6,7 +6,9 @@ use {
     std::{
         collections::{
             BTreeMap,
+            BTreeSet,
             HashMap,
+            HashSet,
         },
         convert::{
             Infallible as Never,
@@ -295,30 +297,30 @@ impl<T: Protocol + Sync> Protocol for Option<T> {
 }
 
 #[derive(Debug)]
-pub enum VecReadError<T: Protocol> {
+pub enum SeqReadError<T: Protocol> {
     Elt(T::ReadError),
     Io(io::Error),
 }
 
-impl<T: Protocol> fmt::Display for VecReadError<T>
+impl<T: Protocol> fmt::Display for SeqReadError<T>
 where T::ReadError: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            VecReadError::Elt(e) => e.fmt(f),
-            VecReadError::Io(e) => write!(f, "I/O error: {}", e),
+            SeqReadError::Elt(e) => e.fmt(f),
+            SeqReadError::Io(e) => write!(f, "I/O error: {}", e),
         }
     }
 }
 
 impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
-    type ReadError = VecReadError<T>;
+    type ReadError = SeqReadError<T>;
 
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<Vec<T>, VecReadError<T>>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<Vec<T>, SeqReadError<T>>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(&mut stream).await.map_err(VecReadError::Io)?;
+            let len = u64::read(&mut stream).await.map_err(SeqReadError::Io)?;
             let mut buf = Vec::with_capacity(len.try_into().expect("tried to read vector longer than usize::MAX"));
             for _ in 0..len {
-                buf.push(T::read(&mut stream).await.map_err(VecReadError::Elt)?);
+                buf.push(T::read(&mut stream).await.map_err(SeqReadError::Elt)?);
             }
             Ok(buf)
         })
@@ -335,11 +337,11 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     }
 
     #[cfg(feature = "blocking")]
-    fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<Vec<T>, VecReadError<T>> {
-        let len = u64::read_sync(&mut stream).map_err(VecReadError::Io)?;
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<Vec<T>, SeqReadError<T>> {
+        let len = u64::read_sync(&mut stream).map_err(SeqReadError::Io)?;
         let mut buf = Vec::with_capacity(len.try_into().expect("tried to read vector longer than usize::MAX"));
         for _ in 0..len {
-            buf.push(T::read_sync(&mut stream).map_err(VecReadError::Elt)?);
+            buf.push(T::read_sync(&mut stream).map_err(SeqReadError::Elt)?);
         }
         Ok(buf)
     }
@@ -354,10 +356,98 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     }
 }
 
+impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
+    type ReadError = SeqReadError<T>;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<BTreeSet<T>, SeqReadError<T>>> + Send + 'a>> {
+        Box::pin(async move {
+            let len = u64::read(&mut stream).await.map_err(SeqReadError::Io)?;
+            let mut set = BTreeSet::default();
+            for _ in 0..len {
+                set.insert(T::read(&mut stream).await.map_err(SeqReadError::Elt)?);
+            }
+            Ok(set)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            u64::try_from(self.len()).expect("BTreeSet was longer than u64::MAX").write(&mut sink).await?;
+            for elt in self {
+                elt.write(&mut sink).await?;
+            }
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<BTreeSet<T>, SeqReadError<T>> {
+        let len = u64::read_sync(&mut stream).map_err(SeqReadError::Io)?;
+        let mut set = BTreeSet::default();
+        for _ in 0..len {
+            set.insert(T::read_sync(&mut stream).map_err(SeqReadError::Elt)?);
+        }
+        Ok(set)
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+        u64::try_from(self.len()).expect("BTreeSet was longer than u32::MAX").write_sync(&mut sink)?;
+        for elt in self {
+            elt.write_sync(&mut sink)?;
+        }
+        Ok(())
+    }
+}
+
+impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
+    type ReadError = SeqReadError<T>;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<HashSet<T>, SeqReadError<T>>> + Send + 'a>> {
+        Box::pin(async move {
+            let len = u64::read(&mut stream).await.map_err(SeqReadError::Io)?;
+            let mut set = HashSet::with_capacity(len.try_into().expect("tried to read HashSet longer than usize::MAX"));
+            for _ in 0..len {
+                set.insert(T::read(&mut stream).await.map_err(SeqReadError::Elt)?);
+            }
+            Ok(set)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            u64::try_from(self.len()).expect("HashSet was longer than u64::MAX").write(&mut sink).await?;
+            for elt in self {
+                elt.write(&mut sink).await?;
+            }
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<HashSet<T>, SeqReadError<T>> {
+        let len = u64::read_sync(&mut stream).map_err(SeqReadError::Io)?;
+        let mut set = HashSet::with_capacity(len.try_into().expect("tried to read HashSet longer than usize::MAX"));
+        for _ in 0..len {
+            set.insert(T::read_sync(&mut stream).map_err(SeqReadError::Elt)?);
+        }
+        Ok(set)
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+        u64::try_from(self.len()).expect("HashSet was longer than u32::MAX").write_sync(&mut sink)?;
+        for elt in self {
+            elt.write_sync(&mut sink)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, From)]
 pub enum StringReadError {
     Utf8(FromUtf8Error),
-    Vec(VecReadError<u8>),
+    Vec(SeqReadError<u8>),
 }
 
 impl fmt::Display for StringReadError {
