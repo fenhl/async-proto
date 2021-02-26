@@ -6,9 +6,10 @@
 //!
 //! # Features
 //!
-//! The following feature can be enabled via Cargo:
+//! The following features can be enabled via Cargo:
 //!
 //! * `blocking`: Adds blocking `read_sync` and `write_sync` methods to the `Protocol` trait.
+//! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements `Protocol` for its `Value`, `Map`, and `Number` types.
 
 #![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
 #![forbid(unsafe_code)]

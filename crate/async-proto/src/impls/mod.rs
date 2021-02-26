@@ -22,7 +22,6 @@ use {
         pin::Pin,
         string::FromUtf8Error,
     },
-
     derive_more::From,
     tokio::io::{
         AsyncRead,
@@ -40,6 +39,8 @@ use {
         WriteBytesExt as _,
     },
 };
+
+#[cfg(feature = "serde_json")] pub mod serde_json;
 
 macro_rules! impl_protocol_primitive {
     ($ty:ty, $read:ident, $write:ident$(, $endian:ty)?) => {
@@ -81,6 +82,58 @@ impl_protocol_primitive!(u64, read_u64, write_u64, NetworkEndian);
 impl_protocol_primitive!(i64, read_i64, write_i64, NetworkEndian);
 impl_protocol_primitive!(u128, read_u128, write_u128, NetworkEndian);
 impl_protocol_primitive!(i128, read_i128, write_i128, NetworkEndian);
+
+impl Protocol for f32 {
+    type ReadError = io::Error;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: R) -> Pin<Box<dyn Future<Output = io::Result<f32>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(f32::from_be_bytes(<[u8; 4]>::read(stream).await?))
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            self.to_be_bytes().write(sink).await
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> io::Result<f32> {
+        stream.read_f32::<NetworkEndian>()
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+        sink.write_f32::<NetworkEndian>(*self)
+    }
+}
+
+impl Protocol for f64 {
+    type ReadError = io::Error;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: R) -> Pin<Box<dyn Future<Output = io::Result<f64>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(f64::from_be_bytes(<[u8; 8]>::read(stream).await?))
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            self.to_be_bytes().write(sink).await
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(mut stream: impl Read + 'a) -> io::Result<f64> {
+        stream.read_f64::<NetworkEndian>()
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+        sink.write_f64::<NetworkEndian>(*self)
+    }
+}
 
 macro_rules! impl_protocol_tuple {
     ($read_err:ident, $($ty:ident),+) => {
@@ -176,6 +229,106 @@ impl Protocol for () {
     #[cfg(feature = "blocking")]
     fn read_sync<'a>(_: impl Read + 'a) -> Result<(), Never> {
         Ok(())
+    }
+
+    #[cfg(feature = "blocking")]
+    fn write_sync<'a>(&self, _: impl Write + 'a) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+macro_rules! impl_protocol_array {
+    ($n:literal, $($ty:ident),+) => {
+        impl<T: Protocol + Send + Sync> Protocol for [T; $n]
+        where T::ReadError: Send {
+            type ReadError = T::ReadError;
+
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<[T; $n], T::ReadError>> + Send + 'a>> {
+                Box::pin(async move {
+                    Ok([
+                        $($ty::read(&mut stream).await?,)+
+                    ])
+                })
+            }
+
+            fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, mut sink: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+                Box::pin(async move {
+                    for elt in self {
+                        elt.write(&mut sink).await?;
+                    }
+                    Ok(())
+                })
+            }
+
+            #[cfg(feature = "blocking")]
+            fn read_sync<'a>(mut stream: impl Read + 'a) -> Result<[T; $n], T::ReadError> {
+                Ok([
+                    $($ty::read_sync(&mut stream)?,)+
+                ])
+            }
+
+            #[cfg(feature = "blocking")]
+            fn write_sync<'a>(&self, mut sink: impl Write + 'a) -> io::Result<()> {
+                for elt in self {
+                    elt.write_sync(&mut sink)?;
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_protocol_array!(1, T);
+impl_protocol_array!(2, T, T);
+impl_protocol_array!(3, T, T, T);
+impl_protocol_array!(4, T, T, T, T);
+impl_protocol_array!(5, T, T, T, T, T);
+impl_protocol_array!(6, T, T, T, T, T, T);
+impl_protocol_array!(7, T, T, T, T, T, T, T);
+impl_protocol_array!(8, T, T, T, T, T, T, T, T);
+impl_protocol_array!(9, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(10, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(11, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(12, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(13, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(14, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(15, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(16, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(17, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(18, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(19, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(20, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(21, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(22, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(23, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(24, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(25, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(26, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(27, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(28, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(29, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(30, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(31, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+impl_protocol_array!(32, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
+
+impl<T> Protocol for [T; 0] {
+    type ReadError = Never;
+
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(_: R) -> Pin<Box<dyn Future<Output = Result<[T; 0], Never>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok([])
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, _: W) -> Pin<Box<dyn Future<Output = io::Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "blocking")]
+    fn read_sync<'a>(_: impl Read + 'a) -> Result<[T; 0], Never> {
+        Ok([])
     }
 
     #[cfg(feature = "blocking")]
@@ -298,7 +451,7 @@ impl<T: Protocol + Sync> Protocol for Option<T> {
 
 #[derive(Debug)]
 pub enum SeqReadError<T: Protocol> {
-    Elt(T::ReadError),
+    Elt(Box<T::ReadError>),
     Io(io::Error),
 }
 
@@ -320,7 +473,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
             let len = u64::read(&mut stream).await.map_err(SeqReadError::Io)?;
             let mut buf = Vec::with_capacity(len.try_into().expect("tried to read vector longer than usize::MAX"));
             for _ in 0..len {
-                buf.push(T::read(&mut stream).await.map_err(SeqReadError::Elt)?);
+                buf.push(T::read(&mut stream).await.map_err(|e| SeqReadError::Elt(Box::new(e)))?);
             }
             Ok(buf)
         })
@@ -341,7 +494,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
         let len = u64::read_sync(&mut stream).map_err(SeqReadError::Io)?;
         let mut buf = Vec::with_capacity(len.try_into().expect("tried to read vector longer than usize::MAX"));
         for _ in 0..len {
-            buf.push(T::read_sync(&mut stream).map_err(SeqReadError::Elt)?);
+            buf.push(T::read_sync(&mut stream).map_err(|e| SeqReadError::Elt(Box::new(e)))?);
         }
         Ok(buf)
     }
@@ -364,7 +517,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
             let len = u64::read(&mut stream).await.map_err(SeqReadError::Io)?;
             let mut set = BTreeSet::default();
             for _ in 0..len {
-                set.insert(T::read(&mut stream).await.map_err(SeqReadError::Elt)?);
+                set.insert(T::read(&mut stream).await.map_err(|e| SeqReadError::Elt(Box::new(e)))?);
             }
             Ok(set)
         })
@@ -385,7 +538,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
         let len = u64::read_sync(&mut stream).map_err(SeqReadError::Io)?;
         let mut set = BTreeSet::default();
         for _ in 0..len {
-            set.insert(T::read_sync(&mut stream).map_err(SeqReadError::Elt)?);
+            set.insert(T::read_sync(&mut stream).map_err(|e| SeqReadError::Elt(Box::new(e)))?);
         }
         Ok(set)
     }
@@ -408,7 +561,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
             let len = u64::read(&mut stream).await.map_err(SeqReadError::Io)?;
             let mut set = HashSet::with_capacity(len.try_into().expect("tried to read HashSet longer than usize::MAX"));
             for _ in 0..len {
-                set.insert(T::read(&mut stream).await.map_err(SeqReadError::Elt)?);
+                set.insert(T::read(&mut stream).await.map_err(|e| SeqReadError::Elt(Box::new(e)))?);
             }
             Ok(set)
         })
@@ -429,7 +582,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
         let len = u64::read_sync(&mut stream).map_err(SeqReadError::Io)?;
         let mut set = HashSet::with_capacity(len.try_into().expect("tried to read HashSet longer than usize::MAX"));
         for _ in 0..len {
-            set.insert(T::read_sync(&mut stream).map_err(SeqReadError::Elt)?);
+            set.insert(T::read_sync(&mut stream).map_err(|e| SeqReadError::Elt(Box::new(e)))?);
         }
         Ok(set)
     }
@@ -494,8 +647,8 @@ impl Protocol for String {
 #[derive(Debug)]
 pub enum MapReadError<K: Protocol, V: Protocol> {
     Io(io::Error),
-    Key(K::ReadError),
-    Value(V::ReadError),
+    Key(Box<K::ReadError>),
+    Value(Box<V::ReadError>),
 }
 
 impl<K: Protocol, V: Protocol> fmt::Display for MapReadError<K, V>
@@ -518,7 +671,7 @@ where K::ReadError: Send, V::ReadError: Send {
             let len = u64::read(&mut stream).await.map_err(MapReadError::Io)?;
             let mut map = BTreeMap::default();
             for _ in 0..len {
-                map.insert(K::read(&mut stream).await.map_err(MapReadError::Key)?, V::read(&mut stream).await.map_err(MapReadError::Value)?);
+                map.insert(K::read(&mut stream).await.map_err(|e| MapReadError::Key(Box::new(e)))?, V::read(&mut stream).await.map_err(|e| MapReadError::Value(Box::new(e)))?);
             }
             Ok(map)
         })
@@ -540,7 +693,7 @@ where K::ReadError: Send, V::ReadError: Send {
         let len = u64::read_sync(&mut stream).map_err(MapReadError::Io)?;
         let mut map = BTreeMap::default();
         for _ in 0..len {
-            map.insert(K::read_sync(&mut stream).map_err(MapReadError::Key)?, V::read_sync(&mut stream).map_err(MapReadError::Value)?);
+            map.insert(K::read_sync(&mut stream).map_err(|e| MapReadError::Key(Box::new(e)))?, V::read_sync(&mut stream).map_err(|e| MapReadError::Value(Box::new(e)))?);
         }
         Ok(map)
     }
@@ -565,7 +718,7 @@ where K::ReadError: Send, V::ReadError: Send {
             let len = u64::read(&mut stream).await.map_err(MapReadError::Io)?;
             let mut map = HashMap::with_capacity(len.try_into().expect("tried to read map longer than usize::MAX"));
             for _ in 0..len {
-                map.insert(K::read(&mut stream).await.map_err(MapReadError::Key)?, V::read(&mut stream).await.map_err(MapReadError::Value)?);
+                map.insert(K::read(&mut stream).await.map_err(|e| MapReadError::Key(Box::new(e)))?, V::read(&mut stream).await.map_err(|e| MapReadError::Value(Box::new(e)))?);
             }
             Ok(map)
         })
@@ -587,7 +740,7 @@ where K::ReadError: Send, V::ReadError: Send {
         let len = u64::read_sync(&mut stream).map_err(MapReadError::Io)?;
         let mut map = HashMap::with_capacity(len.try_into().expect("tried to read map longer than usize::MAX"));
         for _ in 0..len {
-            map.insert(K::read_sync(&mut stream).map_err(MapReadError::Key)?, V::read_sync(&mut stream).map_err(MapReadError::Value)?);
+            map.insert(K::read_sync(&mut stream).map_err(|e| MapReadError::Key(Box::new(e)))?, V::read_sync(&mut stream).map_err(|e| MapReadError::Value(Box::new(e)))?);
         }
         Ok(map)
     }
