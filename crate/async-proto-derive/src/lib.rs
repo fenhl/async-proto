@@ -216,9 +216,15 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
         }
         Data::Union(_) => return quote!(compile_error!("unions not supported in derive(Protocol)")).into(),
     };
-    let blocking_impls = if cfg!(feature = "blocking") {
+    let read_sync = if cfg!(feature = "read-sync") {
         quote! {
             fn read_sync(mut stream: &mut impl ::std::io::Read) -> Result<Self, #async_proto_crate::ReadError> { #impl_read_sync }
+        }
+    } else {
+        quote!()
+    };
+    let write_sync = if cfg!(feature = "write-sync") {
+        quote! {
             fn write_sync(&self, mut sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), #async_proto_crate::WriteError> { #impl_write_sync }
         }
     } else {
@@ -234,7 +240,8 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                 ::std::boxed::Box::pin(async move { #impl_write })
             }
 
-            #blocking_impls
+            #read_sync
+            #write_sync
         }
     }
 }

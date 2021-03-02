@@ -8,8 +8,10 @@
 //!
 //! The following features can be enabled via Cargo:
 //!
-//! * `blocking`: Adds blocking `read_sync` and `write_sync` methods to the `Protocol` trait.
+//! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
+//! * `read-sync`: Adds a blocking `read_sync` method to the `Protocol` trait.
 //! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements `Protocol` for its `Value`, `Map`, and `Number` types.
+//! * `write-sync`: Adds a blocking `write_sync` method to the `Protocol` trait.
 
 #![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
 #![forbid(unsafe_code)]
@@ -30,7 +32,7 @@ use {
         AsyncWrite,
     },
 };
-#[cfg(feature = "blocking")] use std::io::prelude::*;
+#[cfg(any(feature = "read-sync", feature = "write-sync"))] use std::io::prelude::*;
 pub use async_proto_derive::Protocol;
 #[doc(hidden)] pub use { // used in proc macro
     derive_more,
@@ -110,10 +112,10 @@ pub trait Protocol: Sized {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>>;
     /// Writes a value of this type to an async sink.
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>;
-    #[cfg(feature = "blocking")]
+    #[cfg(feature = "read-sync")]
     /// Reads a value of this type from a sync stream.
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError>;
-    #[cfg(feature = "blocking")]
+    #[cfg(feature = "write-sync")]
     /// Writes a value of this type to a sync sink.
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError>;
 }
