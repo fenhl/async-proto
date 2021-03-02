@@ -77,7 +77,7 @@ impl fmt::Display for ReadError {
     }
 }
 
-/// The error returned from the `read` and `read_sync` methods.
+/// The error returned from the `write` and `write_sync` methods.
 #[derive(Debug, From, Clone)]
 #[allow(missing_docs)]
 pub enum WriteError {
