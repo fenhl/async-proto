@@ -11,7 +11,7 @@
 //! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
 //! * `read-sync`: Adds a blocking `read_sync` method to the `Protocol` trait.
 //! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements `Protocol` for its `Value`, `Map`, and `Number` types.
-//! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience method for reading/writing `Protocol` types from/to websockets.
+//! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing `Protocol` types from/to websockets.
 //! * `write-sync`: Adds a blocking `write_sync` method to the `Protocol` trait.
 
 #![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
