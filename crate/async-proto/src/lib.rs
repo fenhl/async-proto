@@ -11,7 +11,8 @@
 //! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
 //! * `read-sync`: Adds a blocking `read_sync` method to the `Protocol` trait.
 //! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements `Protocol` for its `Value`, `Map`, and `Number` types.
-//! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing `Protocol` types from/to websockets.
+//! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing `Protocol` types from/to its websockets.
+//! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing `Protocol` types from/to its websockets.
 //! * `write-sync`: Adds a blocking `write_sync` method to the `Protocol` trait.
 
 #![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
@@ -34,7 +35,7 @@ use {
     },
 };
 #[cfg(any(feature = "read-sync", feature = "write-sync"))] use std::io::prelude::*;
-#[cfg(feature = "warp")] use futures::{
+#[cfg(any(feature = "tokio-tungstenite", feature = "warp"))] use futures::{
     Sink,
     SinkExt as _,
     stream::{
@@ -58,7 +59,8 @@ pub enum ReadError {
     BufSize(TryFromIntError),
     /// An error variant you can use when manually implementing [`Protocol`]
     Custom(String),
-    /// Used in the `warp` feature
+    #[cfg(any(feature = "tokio-tungstenite", feature = "warp"))]
+    /// Used in the `tokio-tungstenite` and `warp` features
     EndOfStream,
     #[cfg(feature = "serde_json")]
     /// Used in the `serde_json` feature
@@ -66,6 +68,9 @@ pub enum ReadError {
     Io(Arc<io::Error>),
     /// Attempted to read an empty type
     ReadNever,
+    #[cfg(feature = "tokio-tungstenite")]
+    /// Used in the `tokio-tungstenite` feature
+    Tungstenite(Arc<dep_tokio_tungstenite::tungstenite::Error>),
     #[from(ignore)]
     UnknownVariant(u8),
     Utf8(FromUtf8Error),
@@ -77,6 +82,13 @@ pub enum ReadError {
 impl From<io::Error> for ReadError {
     fn from(e: io::Error) -> ReadError {
         ReadError::Io(Arc::new(e))
+    }
+}
+
+#[cfg(feature = "tokio-tungstenite")]
+impl From<dep_tokio_tungstenite::tungstenite::Error> for ReadError {
+    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> ReadError {
+        ReadError::Tungstenite(Arc::new(e))
     }
 }
 
@@ -92,11 +104,14 @@ impl fmt::Display for ReadError {
         match self {
             ReadError::BufSize(e) => write!(f, "received a buffer with more than usize::MAX elements: {}", e),
             ReadError::Custom(msg) => msg.fmt(f),
+            #[cfg(any(feature = "tokio-tungstenite", feature = "warp"))]
             ReadError::EndOfStream => write!(f, "reached end of stream"),
             #[cfg(feature = "serde_json")]
             ReadError::FloatNotFinite => write!(f, "received an infinite or NaN JSON number"),
             ReadError::Io(e) => write!(f, "I/O error: {}", e),
             ReadError::ReadNever => write!(f, "attempted to read an empty type"),
+            #[cfg(feature = "tokio-tungstenite")]
+            ReadError::Tungstenite(e) => write!(f, "tungstenite error: {}", e),
             ReadError::UnknownVariant(n) => write!(f, "unknown enum variant: {}", n),
             ReadError::Utf8(e) => e.fmt(f),
             #[cfg(feature = "warp")]
@@ -114,6 +129,9 @@ pub enum WriteError {
     /// An error variant you can use when manually implementing [`Protocol`]
     Custom(String),
     Io(Arc<io::Error>),
+    #[cfg(feature = "tokio-tungstenite")]
+    /// Used in the `tokio-tungstenite` feature
+    Tungstenite(Arc<dep_tokio_tungstenite::tungstenite::Error>),
     #[cfg(feature = "warp")]
     /// Used in the `warp` feature
     Warp(Arc<dep_warp::Error>),
@@ -122,6 +140,13 @@ pub enum WriteError {
 impl From<io::Error> for WriteError {
     fn from(e: io::Error) -> WriteError {
         WriteError::Io(Arc::new(e))
+    }
+}
+
+#[cfg(feature = "tokio-tungstenite")]
+impl From<dep_tokio_tungstenite::tungstenite::Error> for WriteError {
+    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> WriteError {
+        WriteError::Tungstenite(Arc::new(e))
     }
 }
 
@@ -138,6 +163,8 @@ impl fmt::Display for WriteError {
             WriteError::BufSize(e) => write!(f, "tried to send a buffer with more than u64::MAX elements: {}", e),
             WriteError::Custom(msg) => msg.fmt(f),
             WriteError::Io(e) => write!(f, "I/O error: {}", e),
+            #[cfg(feature = "tokio-tungstenite")]
+            WriteError::Tungstenite(e) => write!(f, "tungstenite error: {}", e),
             #[cfg(feature = "warp")]
             WriteError::Warp(e) => write!(f, "warp error: {}", e),
         }
@@ -157,9 +184,30 @@ pub trait Protocol: Sized {
     /// Writes a value of this type to a sync sink.
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError>;
 
+    #[cfg(feature = "tokio-tungstenite")]
+    /// Reads a value of this type from a `tokio-tungstenite` websocket.
+    fn read_ws<'a, R: Stream<Item = Result<dep_tokio_tungstenite::tungstenite::Message, dep_tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
+            Self::read(&mut &*packet.into_data()).await
+        })
+    }
+
+    #[cfg(feature = "tokio-tungstenite")]
+    /// Writes a value of this type to a `tokio-tungstenite` websocket.
+    fn write_ws<'a, W: Sink<dep_tokio_tungstenite::tungstenite::Message, Error = dep_tokio_tungstenite::tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
+    where Self: Sync {
+        Box::pin(async move {
+            let mut buf = Vec::default();
+            self.write(&mut buf).await?;
+            sink.send(dep_tokio_tungstenite::tungstenite::Message::binary(buf)).await?;
+            Ok(())
+        })
+    }
+
     #[cfg(feature = "warp")]
     /// Reads a value of this type from a `warp` websocket.
-    fn read_ws<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+    fn read_warp<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
             Self::read(&mut packet.as_bytes()).await
@@ -168,7 +216,7 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "warp")]
     /// Writes a value of this type to a `warp` websocket.
-    fn write_ws<'a, W: Sink<dep_warp::filters::ws::Message, Error = dep_warp::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
+    fn write_warp<'a, W: Sink<dep_warp::filters::ws::Message, Error = dep_warp::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
