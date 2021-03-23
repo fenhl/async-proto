@@ -42,6 +42,7 @@ use {
 
 macro_rules! impl_protocol_primitive {
     ($ty:ty, $read:ident, $write:ident$(, $endian:ty)?) => {
+        /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
         impl Protocol for $ty {
             fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<$ty, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
@@ -79,6 +80,7 @@ impl_protocol_primitive!(i64, read_i64, write_i64, NetworkEndian);
 impl_protocol_primitive!(u128, read_u128, write_u128, NetworkEndian);
 impl_protocol_primitive!(i128, read_i128, write_i128, NetworkEndian);
 
+/// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
 impl Protocol for f32 {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<f32, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -103,6 +105,7 @@ impl Protocol for f32 {
     }
 }
 
+/// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
 impl Protocol for f64 {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<f64, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -280,6 +283,7 @@ impl_protocol_array!(30, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T
 impl_protocol_array!(31, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
 impl_protocol_array!(32, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
 
+/// Represented as one byte, with `0` for `false` and `1` for `true`.
 impl Protocol for bool {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<bool, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -356,6 +360,7 @@ impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generic
     }
 }
 
+/// A vector is prefixed with the length as a [`u64`].
 impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Vec<T>, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -398,6 +403,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     }
 }
 
+/// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<BTreeSet<T>, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -442,6 +448,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     }
 }
 
+/// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<HashSet<T>, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -484,6 +491,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     }
 }
 
+/// A string is encoded in UTF-8 and prefixed with the length as a [`u64`].
 impl Protocol for String {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<String, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -514,6 +522,7 @@ impl Protocol for String {
     }
 }
 
+/// A map is prefixed with the length as a [`u64`].
 impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'static> Protocol for BTreeMap<K, V> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<BTreeMap<K, V>, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -560,6 +569,7 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
     }
 }
 
+/// A map is prefixed with the length as a [`u64`].
 impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol for HashMap<K, V> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<HashMap<K, V>, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -604,6 +614,7 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
     }
 }
 
+/// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
 impl Protocol for std::time::Duration {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<std::time::Duration, ReadError>> + Send + 'a>> {
         Box::pin(async move {
