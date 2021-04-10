@@ -614,6 +614,42 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
     }
 }
 
+/// A cow is represented like its owned variant.
+///
+/// Note that due to a restriction in the type system, writing a borrowed cow requires cloning it.
+impl<'cow, B: ToOwned + Sync + ?Sized> Protocol for std::borrow::Cow<'cow, B>
+where B::Owned: Protocol + Send + Sync {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<std::borrow::Cow<'cow, B>, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(std::borrow::Cow::Owned(B::Owned::read(stream).await?))
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            match self {
+                std::borrow::Cow::Borrowed(borrowed) => (*borrowed).to_owned().write(sink).await?,
+                std::borrow::Cow::Owned(owned) => owned.write(sink).await?,
+            }
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "read-sync")]
+    fn read_sync(stream: &mut impl Read) -> Result<std::borrow::Cow<'cow, B>, ReadError> {
+        Ok(std::borrow::Cow::Owned(B::Owned::read_sync(stream)?))
+    }
+
+    #[cfg(feature = "write-sync")]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        match self {
+            std::borrow::Cow::Borrowed(borrowed) => (*borrowed).to_owned().write_sync(sink)?,
+            std::borrow::Cow::Owned(owned) => owned.write_sync(sink)?,
+        }
+        Ok(())
+    }
+}
+
 /// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
 impl Protocol for std::time::Duration {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<std::time::Duration, ReadError>> + Send + 'a>> {
