@@ -650,6 +650,48 @@ where B::Owned: Protocol + Send + Sync {
     }
 }
 
+macro_rules! impl_protocol_nonzero {
+    ($ty:ty, $primitive:ty) => {
+        /// A nonzero integer is represented like its value.
+        impl Protocol for $ty {
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<$ty, ReadError>> + Send + 'a>> {
+                Box::pin(async move {
+                    Ok(<$ty>::new(<$primitive>::read(stream).await?).ok_or(ReadError::UnknownVariant(0))?)
+                })
+            }
+
+            fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+                Box::pin(async move {
+                    self.get().write(sink).await?;
+                    Ok(())
+                })
+            }
+
+            #[cfg(feature = "read-sync")]
+            fn read_sync(stream: &mut impl Read) -> Result<$ty, ReadError> {
+                Ok(<$ty>::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant(0))?)
+            }
+
+            #[cfg(feature = "write-sync")]
+            fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+                self.get().write_sync(sink)?;
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_protocol_nonzero!(std::num::NonZeroU8, u8);
+impl_protocol_nonzero!(std::num::NonZeroI8, i8);
+impl_protocol_nonzero!(std::num::NonZeroU16, u16);
+impl_protocol_nonzero!(std::num::NonZeroI16, i16);
+impl_protocol_nonzero!(std::num::NonZeroU32, u32);
+impl_protocol_nonzero!(std::num::NonZeroI32, i32);
+impl_protocol_nonzero!(std::num::NonZeroU64, u64);
+impl_protocol_nonzero!(std::num::NonZeroI64, i64);
+impl_protocol_nonzero!(std::num::NonZeroU128, u128);
+impl_protocol_nonzero!(std::num::NonZeroI128, i128);
+
 /// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
 impl Protocol for std::time::Duration {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<std::time::Duration, ReadError>> + Send + 'a>> {
