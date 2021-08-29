@@ -51,16 +51,18 @@ pub use async_proto_derive::Protocol;
 
 mod impls;
 
-/// The error returned from the `read` and `read_sync` methods.
+#[cfg_attr(not(feature = "read-sync"), doc = "The error returned from the [`read`](Protocol::read) method.")]
+#[cfg_attr(feature = "read-sync", doc = "The error returned from the [`read`](Protocol::read) and [`read_sync`](Protocol::read_sync) methods.")]
 #[derive(Debug, From, Clone)]
 #[allow(missing_docs)]
 pub enum ReadError {
-    /// Received a buffer with more than `usize::MAX` elements
+    /// Received a buffer with more than [`usize::MAX`] elements
     BufSize(TryFromIntError),
     /// An error variant you can use when manually implementing [`Protocol`]
     Custom(String),
-    #[cfg(any(feature = "tokio-tungstenite", feature = "warp"))]
-    /// Used in the `tokio-tungstenite` and `warp` features
+    /// The end of the stream was encountered before a complete value was read.
+    ///
+    /// Note that this error condition may also be represented as a [`ReadError::Io`] with [`kind`](io::Error::kind) [`UnexpectedEof`](io::ErrorKind::UnexpectedEof).
     EndOfStream,
     #[cfg(feature = "serde_json")]
     /// Used in the `serde_json` feature
@@ -104,7 +106,6 @@ impl fmt::Display for ReadError {
         match self {
             ReadError::BufSize(e) => write!(f, "received a buffer with more than usize::MAX elements: {}", e),
             ReadError::Custom(msg) => msg.fmt(f),
-            #[cfg(any(feature = "tokio-tungstenite", feature = "warp"))]
             ReadError::EndOfStream => write!(f, "reached end of stream"),
             #[cfg(feature = "serde_json")]
             ReadError::FloatNotFinite => write!(f, "received an infinite or NaN JSON number"),
@@ -124,7 +125,7 @@ impl fmt::Display for ReadError {
 #[derive(Debug, From, Clone)]
 #[allow(missing_docs)]
 pub enum WriteError {
-    /// Tried to send a buffer with more than `u64::MAX` elements
+    /// Tried to send a buffer with more than [`u64::MAX`] elements
     BufSize(TryFromIntError),
     /// An error variant you can use when manually implementing [`Protocol`]
     Custom(String),
@@ -184,8 +185,37 @@ pub trait Protocol: Sized {
     /// Writes a value of this type to a sync sink.
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError>;
 
+    #[cfg(feature = "read-sync")]
+    /// Attempts to read a value of this type from a prefix in a buffer and a suffix in a sync stream.
+    ///
+    /// If [`io::ErrorKind::WouldBlock`] is encountered, `Ok(None)` is returned and the portion read successfully is appended to `buf`. Otherwise, the prefix representing the returned valud is removed from `buf`.
+    ///
+    /// Callers, not implementations, should ensure that `stream` is non-blocking if desired.
+    fn try_read(stream: &mut impl Read, buf: &mut Vec<u8>) -> Result<Option<Self>, ReadError> {
+        let mut temp_buf = vec![0; 8];
+        loop {
+            let mut slice = &mut &**buf;
+            match Self::read_sync(&mut slice) {
+                Ok(value) => {
+                    let value_len = slice.len();
+                    drop(slice);
+                    buf.drain(..buf.len() - value_len);
+                    return Ok(Some(value))
+                }
+                Err(ReadError::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+                Err(e) => return Err(e),
+            }
+            match stream.read(&mut temp_buf) {
+                Ok(0) => return Err(ReadError::EndOfStream),
+                Ok(n) => buf.extend_from_slice(&temp_buf[..n]),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
     #[cfg(feature = "tokio-tungstenite")]
-    /// Reads a value of this type from a `tokio-tungstenite` websocket.
+    /// Reads a value of this type from a [`tokio-tungstenite`](dep_tokio_tungstenite) websocket.
     fn read_ws<'a, R: Stream<Item = Result<dep_tokio_tungstenite::tungstenite::Message, dep_tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
@@ -194,7 +224,7 @@ pub trait Protocol: Sized {
     }
 
     #[cfg(feature = "tokio-tungstenite")]
-    /// Writes a value of this type to a `tokio-tungstenite` websocket.
+    /// Writes a value of this type to a [`tokio-tungstenite`](dep_tokio_tungstenite) websocket.
     fn write_ws<'a, W: Sink<dep_tokio_tungstenite::tungstenite::Message, Error = dep_tokio_tungstenite::tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
@@ -206,7 +236,7 @@ pub trait Protocol: Sized {
     }
 
     #[cfg(feature = "warp")]
-    /// Reads a value of this type from a `warp` websocket.
+    /// Reads a value of this type from a [`warp`](dep_warp) websocket.
     fn read_warp<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
@@ -215,7 +245,7 @@ pub trait Protocol: Sized {
     }
 
     #[cfg(feature = "warp")]
-    /// Writes a value of this type to a `warp` websocket.
+    /// Writes a value of this type to a [`warp`](dep_warp) websocket.
     fn write_warp<'a, W: Sink<dep_warp::filters::ws::Message, Error = dep_warp::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {

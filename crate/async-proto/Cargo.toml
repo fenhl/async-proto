@@ -20,7 +20,7 @@ write-sync = ["async-proto-derive/write-sync", "byteorder"]
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.8.1"
+version = "=0.8.2"
 
 [dependencies.byteorder]
 version = "1"
