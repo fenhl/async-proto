@@ -513,7 +513,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     }
 }
 
-/// A string is encoded in UTF-8 and prefixed with the length as a [`u64`].
+/// A string is encoded in UTF-8 and prefixed with the length in bytes as a [`u64`].
 impl Protocol for String {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<String, ReadError>> + Send + 'a>> {
         Box::pin(async move {

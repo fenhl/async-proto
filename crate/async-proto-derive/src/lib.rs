@@ -250,7 +250,8 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
 ///
 /// The network representation is very simple:
 ///
-/// * For `enum`s, it starts with a single [`u8`] representing the variant, starting with `0` for the first variant declared and so on.
+/// * Attempting to read an `enum` with no variants errors immediately, without waiting for data to appear on the stream.
+/// * For non-empty `enum`s, the representation starts with a single [`u8`] representing the variant, starting with `0` for the first variant declared and so on.
 /// * Then follow the `Protocol` representations of any fields of the `struct` or variant, in the order declared.
 ///
 /// This representation can waste bandwidth for some types, e.g. `struct`s with multiple [`bool`] fields. For those, you may want to implement `Protocol` manually.
