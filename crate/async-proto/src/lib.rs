@@ -1,3 +1,8 @@
+#![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
+#![forbid(unsafe_code)]
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! This is `async-proto`, a library crate facilitating simple binary network protocols with `async` support.
 //!
 //! The main feature is the [`Protocol`] trait, which allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
@@ -14,9 +19,6 @@
 //! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing `Protocol` types from/to its websockets.
 //! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing `Protocol` types from/to its websockets.
 //! * `write-sync`: Adds a blocking `write_sync` method to the `Protocol` trait.
-
-#![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
-#![forbid(unsafe_code)]
 
 use {
     std::{
