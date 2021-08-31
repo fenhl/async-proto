@@ -200,6 +200,39 @@ pub trait Protocol: Sized {
     /// If [`io::ErrorKind::WouldBlock`] is encountered, `Ok(None)` is returned and the portion read successfully is appended to `buf`. Otherwise, the prefix representing the returned value is removed from `buf`.
     ///
     /// Callers, not implementations, should ensure that `stream` is non-blocking if desired.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use {
+    ///     std::net::TcpStream,
+    ///     async_proto::Protocol,
+    /// };
+    ///
+    /// struct Client {
+    ///     tcp_stream: TcpStream,
+    ///     buf: Vec<u8>,
+    /// }
+    ///
+    /// impl Client {
+    ///     fn new(tcp_stream: TcpStream) -> Self {
+    ///         Self {
+    ///             tcp_stream,
+    ///             buf: Vec::default(),
+    ///         }
+    ///     }
+    ///
+    ///     fn try_read<T: Protocol>(&mut self) -> Result<Option<T>, async_proto::ReadError> {
+    ///         self.tcp_stream.set_nonblocking(true)?;
+    ///         T::try_read(&mut self.tcp_stream, &mut self.buf)
+    ///     }
+    ///
+    ///     fn write<T: Protocol>(&mut self, msg: &T) -> Result<(), async_proto::WriteError> {
+    ///         self.tcp_stream.set_nonblocking(false)?;
+    ///         msg.write_sync(&mut self.tcp_stream)
+    ///     }
+    /// }
+    /// ```
     fn try_read(stream: &mut impl Read, buf: &mut Vec<u8>) -> Result<Option<Self>, ReadError> {
         let mut temp_buf = vec![0; 8];
         loop {
