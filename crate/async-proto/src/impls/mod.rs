@@ -57,11 +57,13 @@ macro_rules! impl_protocol_primitive {
             }
 
             #[cfg(feature = "read-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<$ty, ReadError> {
                 Ok(stream.$read$(::<$endian>)?()?)
             }
 
             #[cfg(feature = "write-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 Ok(sink.$write$(::<$endian>)?(*self)?)
             }
@@ -95,11 +97,13 @@ impl Protocol for f32 {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<f32, ReadError> {
         Ok(stream.read_f32::<NetworkEndian>()?)
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         Ok(sink.write_f32::<NetworkEndian>(*self)?)
     }
@@ -120,11 +124,13 @@ impl Protocol for f64 {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<f64, ReadError> {
         Ok(stream.read_f64::<NetworkEndian>()?)
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         Ok(sink.write_f64::<NetworkEndian>(*self)?)
     }
@@ -154,6 +160,7 @@ macro_rules! impl_protocol_tuple {
             }
 
             #[cfg(feature = "read-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<($($ty,)*), ReadError> {
                 Ok((
                     $($ty::read_sync(stream)?,)*
@@ -161,6 +168,7 @@ macro_rules! impl_protocol_tuple {
             }
 
             #[cfg(feature = "write-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             #[allow(non_snake_case)]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 let ($($ty,)*) = self;
@@ -209,6 +217,7 @@ macro_rules! impl_protocol_array {
             }
 
             #[cfg(feature = "read-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<[T; $n], ReadError> {
                 Ok([
                     $($ty::read_sync(stream)?,)+
@@ -216,6 +225,7 @@ macro_rules! impl_protocol_array {
             }
 
             #[cfg(feature = "write-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 for elt in self {
                     elt.write_sync(sink)?;
@@ -240,11 +250,13 @@ impl<T> Protocol for [T; 0] {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(_: &mut impl Read) -> Result<[T; 0], ReadError> {
         Ok([])
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, _: &mut impl Write) -> Result<(), WriteError> {
         Ok(())
     }
@@ -302,6 +314,7 @@ impl Protocol for bool {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<bool, ReadError> {
         Ok(match u8::read_sync(stream)? {
             0 => false,
@@ -311,6 +324,7 @@ impl Protocol for bool {
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         if *self { 1u8 } else { 0 }.write_sync(sink)
     }
@@ -340,6 +354,7 @@ impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generic
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Option<T>, ReadError> {
         Ok(if bool::read_sync(stream)? {
             Some(T::read_sync(stream)?)
@@ -349,6 +364,7 @@ impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generic
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         if let Some(value) = self {
             true.write_sync(sink)?;
@@ -384,6 +400,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Vec<T>, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut buf = Vec::with_capacity(len.try_into()?);
@@ -394,6 +411,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for elt in self {
@@ -428,6 +446,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<BTreeSet<T>, ReadError> {
         let len = u64::read_sync(stream)?;
         usize::try_from(len)?; // error here rather than panicking in the insert loop
@@ -439,6 +458,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for elt in self {
@@ -472,6 +492,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<HashSet<T>, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut set = HashSet::with_capacity(len.try_into()?);
@@ -482,6 +503,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for elt in self {
@@ -509,12 +531,14 @@ impl Protocol for String {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<String, ReadError> {
         let buf = Vec::read_sync(stream)?;
         Ok(String::from_utf8(buf)?)
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         sink.write(self.as_bytes())?;
@@ -548,6 +572,7 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<BTreeMap<K, V>, ReadError> {
         let len = u64::read_sync(stream)?;
         usize::try_from(len)?; // error here rather than panicking in the insert loop
@@ -559,6 +584,7 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for (k, v) in self {
@@ -594,6 +620,7 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<HashMap<K, V>, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut map = HashMap::with_capacity(len.try_into()?);
@@ -604,6 +631,7 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for (k, v) in self {
@@ -636,11 +664,13 @@ where B::Owned: Protocol + Send + Sync {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<std::borrow::Cow<'cow, B>, ReadError> {
         Ok(std::borrow::Cow::Owned(B::Owned::read_sync(stream)?))
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         match self {
             std::borrow::Cow::Borrowed(borrowed) => (*borrowed).to_owned().write_sync(sink)?,
@@ -668,11 +698,13 @@ macro_rules! impl_protocol_nonzero {
             }
 
             #[cfg(feature = "read-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<$ty, ReadError> {
                 Ok(<$ty>::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant(0))?)
             }
 
             #[cfg(feature = "write-sync")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 self.get().write_sync(sink)?;
                 Ok(())
@@ -709,11 +741,13 @@ impl Protocol for std::time::Duration {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<std::time::Duration, ReadError> {
         Ok(std::time::Duration::new(u64::read_sync(stream)?, u32::read_sync(stream)?))
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         self.as_secs().write_sync(sink)?;
         self.subsec_nanos().write_sync(sink)?;

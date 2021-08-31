@@ -44,6 +44,7 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<serde_json::Map<String, serde_json::Value>, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut map = serde_json::Map::with_capacity(len.try_into()?);
@@ -54,6 +55,7 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for (k, v) in self {
@@ -94,6 +96,7 @@ impl Protocol for serde_json::Number {
     }
 
     #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<serde_json::Number, ReadError> {
         Ok(match u8::read_sync(stream)? {
             0 => serde_json::Number::from(u64::read_sync(stream)?),
@@ -104,6 +107,7 @@ impl Protocol for serde_json::Number {
     }
 
     #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         if let Some(value) = self.as_u64() {
             0u8.write_sync(sink)?;

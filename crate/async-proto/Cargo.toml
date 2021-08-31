@@ -1,6 +1,6 @@
 [package]
 name = "async-proto"
-version = "0.8.1"
+version = "0.8.2"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2018"
 description = "Simple async binary network protocols"
@@ -10,6 +10,7 @@ repository = "https://github.com/fenhl/async-proto"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 blocking = ["read-sync", "write-sync"]
