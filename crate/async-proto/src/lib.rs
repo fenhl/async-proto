@@ -197,7 +197,7 @@ pub trait Protocol: Sized {
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     /// Attempts to read a value of this type from a prefix in a buffer and a suffix in a sync stream.
     ///
-    /// If [`io::ErrorKind::WouldBlock`] is encountered, `Ok(None)` is returned and the portion read successfully is appended to `buf`. Otherwise, the prefix representing the returned valud is removed from `buf`.
+    /// If [`io::ErrorKind::WouldBlock`] is encountered, `Ok(None)` is returned and the portion read successfully is appended to `buf`. Otherwise, the prefix representing the returned value is removed from `buf`.
     ///
     /// Callers, not implementations, should ensure that `stream` is non-blocking if desired.
     fn try_read(stream: &mut impl Read, buf: &mut Vec<u8>) -> Result<Option<Self>, ReadError> {
