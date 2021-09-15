@@ -214,7 +214,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                 )
             }
         }
-        Data::Union(_) => return quote!(compile_error!("unions not supported in derive(Protocol)")).into(),
+        Data::Union(_) => return quote!(compile_error!("unions not supported in derive(Protocol)");).into(),
     };
     let read_sync = if cfg!(feature = "read-sync") {
         quote! {
@@ -263,7 +263,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
 #[proc_macro_derive(Protocol)]
 pub fn derive_protocol(input: TokenStream) -> TokenStream {
     let DeriveInput { ident, generics, data, .. } = parse_macro_input!(input as DeriveInput);
-    if generics.lt_token.is_some() || generics.where_clause.is_some() { return quote!(compile_error!("generics not supported in derive(Protocol)")).into() } //TODO
+    if generics.lt_token.is_some() || generics.where_clause.is_some() { return quote!(compile_error!("generics not supported in derive(Protocol)");).into() } //TODO
     impl_protocol_inner(false, Path { leading_colon: None, segments: iter::once(PathSegment { ident, arguments: PathArguments::None }).collect() }, data).into()
 }
 
