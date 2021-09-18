@@ -21,10 +21,10 @@ use {
 #[cfg(any(feature = "read-sync", feature = "write-sync"))] use std::io::prelude::*;
 
 impl Protocol for serde_json::Map<String, serde_json::Value> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<serde_json::Map<String, serde_json::Value>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut map = serde_json::Map::with_capacity(len.try_into()?);
+            let mut map = Self::with_capacity(len.try_into()?);
             for _ in 0..len {
                 map.insert(String::read(stream).await?, serde_json::Value::read(stream).await?);
             }
@@ -45,9 +45,9 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<serde_json::Map<String, serde_json::Value>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut map = serde_json::Map::with_capacity(len.try_into()?);
+        let mut map = Self::with_capacity(len.try_into()?);
         for _ in 0..len {
             map.insert(String::read_sync(stream)?, serde_json::Value::read_sync(stream)?);
         }
@@ -67,12 +67,12 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
 }
 
 impl Protocol for serde_json::Number {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<serde_json::Number, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             Ok(match u8::read(stream).await? {
-                0 => serde_json::Number::from(u64::read(stream).await?),
-                1 => serde_json::Number::from(i64::read(stream).await?),
-                2 => serde_json::Number::from_f64(f64::read(stream).await?).ok_or(ReadError::FloatNotFinite)?,
+                0 => Self::from(u64::read(stream).await?),
+                1 => Self::from(i64::read(stream).await?),
+                2 => Self::from_f64(f64::read(stream).await?).ok_or(ReadError::FloatNotFinite)?,
                 n => return Err(ReadError::UnknownVariant(n)),
             })
         })
@@ -97,11 +97,11 @@ impl Protocol for serde_json::Number {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<serde_json::Number, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(match u8::read_sync(stream)? {
-            0 => serde_json::Number::from(u64::read_sync(stream)?),
-            1 => serde_json::Number::from(i64::read_sync(stream)?),
-            2 => serde_json::Number::from_f64(f64::read_sync(stream)?).ok_or(ReadError::FloatNotFinite)?,
+            0 => Self::from(u64::read_sync(stream)?),
+            1 => Self::from(i64::read_sync(stream)?),
+            2 => Self::from_f64(f64::read_sync(stream)?).ok_or(ReadError::FloatNotFinite)?,
             n => return Err(ReadError::UnknownVariant(n)),
         })
     }

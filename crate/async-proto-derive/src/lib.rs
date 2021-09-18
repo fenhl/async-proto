@@ -285,16 +285,18 @@ impl Parse for ImplProtocolFor {
                 let struct_token = input.parse()?;
                 let path = input.parse()?;
                 let lookahead = input.lookahead1();
-                let fields = if lookahead.peek(Brace) {
-                    let content;
-                    let brace_token = braced!(content in input);
-                    let named = content.parse_terminated(Field::parse_named)?;
-                    Fields::Named(FieldsNamed { brace_token, named })
+                let fields = if lookahead.peek(Token![;]) {
+                    Fields::Unit
                 } else if lookahead.peek(Paren) {
                     let content;
                     let paren_token = parenthesized!(content in input);
                     let unnamed = content.parse_terminated(Field::parse_unnamed)?;
                     Fields::Unnamed(FieldsUnnamed { paren_token, unnamed })
+                } else if lookahead.peek(Brace) {
+                    let content;
+                    let brace_token = braced!(content in input);
+                    let named = content.parse_terminated(Field::parse_named)?;
+                    Fields::Named(FieldsNamed { brace_token, named })
                 } else {
                     return Err(lookahead.error())
                 };

@@ -16,6 +16,13 @@ use {
         },
         future::Future,
         hash::Hash,
+        ops::{
+            Range,
+            RangeFrom,
+            RangeInclusive,
+            RangeTo,
+            RangeToInclusive,
+        },
         pin::Pin,
     },
     tokio::io::{
@@ -44,7 +51,7 @@ macro_rules! impl_protocol_primitive {
     ($ty:ty, $read:ident, $write:ident$(, $endian:ty)?) => {
         /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
         impl Protocol for $ty {
-            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<$ty, ReadError>> + Send + 'a>> {
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
                     Ok(stream.$read().await?)
                 })
@@ -58,7 +65,7 @@ macro_rules! impl_protocol_primitive {
 
             #[cfg(feature = "read-sync")]
             #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-            fn read_sync(stream: &mut impl Read) -> Result<$ty, ReadError> {
+            fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
                 Ok(stream.$read$(::<$endian>)?()?)
             }
 
@@ -84,9 +91,9 @@ impl_protocol_primitive!(i128, read_i128, write_i128, NetworkEndian);
 
 /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
 impl Protocol for f32 {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<f32, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            Ok(f32::from_be_bytes(<[u8; 4]>::read(stream).await?))
+            Ok(Self::from_be_bytes(<[u8; 4]>::read(stream).await?))
         })
     }
 
@@ -98,7 +105,7 @@ impl Protocol for f32 {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<f32, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(stream.read_f32::<NetworkEndian>()?)
     }
 
@@ -111,9 +118,9 @@ impl Protocol for f32 {
 
 /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
 impl Protocol for f64 {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<f64, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            Ok(f64::from_be_bytes(<[u8; 8]>::read(stream).await?))
+            Ok(Self::from_be_bytes(<[u8; 8]>::read(stream).await?))
         })
     }
 
@@ -125,7 +132,7 @@ impl Protocol for f64 {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<f64, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(stream.read_f64::<NetworkEndian>()?)
     }
 
@@ -136,11 +143,155 @@ impl Protocol for f64 {
     }
 }
 
+impl<Idx: Protocol + Send + Sync> Protocol for Range<Idx> { //TODO derive
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(Idx::read(stream).await?..Idx::read(stream).await?)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.start.write(sink).await?;
+            self.end.write(sink).await?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(Idx::read_sync(stream)?..Idx::read_sync(stream)?)
+    }
+
+    #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.start.write_sync(sink)?;
+        self.end.write_sync(sink)?;
+        Ok(())
+    }
+}
+
+impl<Idx: Protocol + Send + Sync> Protocol for RangeFrom<Idx> { //TODO derive
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(Idx::read(stream).await?..)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.start.write(sink).await?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(Idx::read_sync(stream)?..)
+    }
+
+    #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.start.write_sync(sink)?;
+        Ok(())
+    }
+}
+
+impl<Idx: Protocol + Send + Sync> Protocol for RangeInclusive<Idx> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(Idx::read(stream).await?..=Idx::read(stream).await?)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.start().write(sink).await?;
+            self.end().write(sink).await?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(Idx::read_sync(stream)?..=Idx::read_sync(stream)?)
+    }
+
+    #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.start().write_sync(sink)?;
+        self.end().write_sync(sink)?;
+        Ok(())
+    }
+}
+
+impl<Idx: Protocol + Send + Sync> Protocol for RangeTo<Idx> { //TODO derive
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(..Idx::read(stream).await?)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.end.write(sink).await?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(..Idx::read_sync(stream)?)
+    }
+
+    #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.end.write_sync(sink)?;
+        Ok(())
+    }
+}
+
+impl<Idx: Protocol + Send + Sync> Protocol for RangeToInclusive<Idx> { //TODO derive
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(..=Idx::read(stream).await?)
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.end.write(sink).await?;
+            Ok(())
+        })
+    }
+
+    #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(..=Idx::read_sync(stream)?)
+    }
+
+    #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.end.write_sync(sink)?;
+        Ok(())
+    }
+}
+
 macro_rules! impl_protocol_tuple {
     ($($ty:ident),*) => {
         #[allow(unused)]
         impl<$($ty: Protocol + Send + Sync),*> Protocol for ($($ty,)*) {
-            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<($($ty,)*), ReadError>> + Send + 'a>> {
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
                     Ok((
                         $($ty::read(stream).await?,)*
@@ -161,7 +312,7 @@ macro_rules! impl_protocol_tuple {
 
             #[cfg(feature = "read-sync")]
             #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-            fn read_sync(stream: &mut impl Read) -> Result<($($ty,)*), ReadError> {
+            fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
                 Ok((
                     $($ty::read_sync(stream)?,)*
                 ))
@@ -199,7 +350,7 @@ macro_rules! impl_protocol_array {
     ($n:literal $(, $ty:ident)+) => {
         #[allow(unused)]
         impl<T: Protocol + Send + Sync> Protocol for [T; $n] {
-            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<[T; $n], ReadError>> + Send + 'a>> {
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
                     Ok([
                         $($ty::read(stream).await?,)+
@@ -218,7 +369,7 @@ macro_rules! impl_protocol_array {
 
             #[cfg(feature = "read-sync")]
             #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-            fn read_sync(stream: &mut impl Read) -> Result<[T; $n], ReadError> {
+            fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
                 Ok([
                     $($ty::read_sync(stream)?,)+
                 ])
@@ -237,7 +388,7 @@ macro_rules! impl_protocol_array {
 }
 
 impl<T> Protocol for [T; 0] {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(_: &'a mut R) -> Pin<Box<dyn Future<Output = Result<[T; 0], ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(_: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             Ok([])
         })
@@ -251,7 +402,7 @@ impl<T> Protocol for [T; 0] {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(_: &mut impl Read) -> Result<[T; 0], ReadError> {
+    fn read_sync(_: &mut impl Read) -> Result<Self, ReadError> {
         Ok([])
     }
 
@@ -297,7 +448,7 @@ impl_protocol_array!(32, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T
 
 /// Represented as one byte, with `0` for `false` and `1` for `true`.
 impl Protocol for bool {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<bool, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             Ok(match u8::read(stream).await? {
                 0 => false,
@@ -315,7 +466,7 @@ impl Protocol for bool {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<bool, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(match u8::read_sync(stream)? {
             0 => false,
             1 => true,
@@ -331,7 +482,7 @@ impl Protocol for bool {
 }
 
 impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generics to impl_protocol_for, then replace this impl
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Option<T>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             Ok(if bool::read(stream).await? {
                 Some(T::read(stream).await?)
@@ -355,7 +506,7 @@ impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generic
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Option<T>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(if bool::read_sync(stream)? {
             Some(T::read_sync(stream)?)
         } else {
@@ -378,10 +529,10 @@ impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generic
 
 /// A vector is prefixed with the length as a [`u64`].
 impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Vec<T>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut buf = Vec::with_capacity(len.try_into()?);
+            let mut buf = Self::with_capacity(len.try_into()?);
             for _ in 0..len {
                 buf.push(T::read(stream).await?);
             }
@@ -401,9 +552,9 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Vec<T>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut buf = Vec::with_capacity(len.try_into()?);
+        let mut buf = Self::with_capacity(len.try_into()?);
         for _ in 0..len {
             buf.push(T::read_sync(stream)?);
         }
@@ -423,11 +574,11 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
 /// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<BTreeSet<T>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
             usize::try_from(len)?; // error here rather than panicking in the insert loop
-            let mut set = BTreeSet::default();
+            let mut set = Self::default();
             for _ in 0..len {
                 set.insert(T::read(stream).await?);
             }
@@ -447,10 +598,10 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<BTreeSet<T>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         usize::try_from(len)?; // error here rather than panicking in the insert loop
-        let mut set = BTreeSet::default();
+        let mut set = Self::default();
         for _ in 0..len {
             set.insert(T::read_sync(stream)?);
         }
@@ -470,10 +621,10 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
 
 /// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<HashSet<T>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut set = HashSet::with_capacity(len.try_into()?);
+            let mut set = Self::with_capacity(len.try_into()?);
             for _ in 0..len {
                 set.insert(T::read(stream).await?);
             }
@@ -493,9 +644,9 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<HashSet<T>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut set = HashSet::with_capacity(len.try_into()?);
+        let mut set = Self::with_capacity(len.try_into()?);
         for _ in 0..len {
             set.insert(T::read_sync(stream)?);
         }
@@ -515,10 +666,10 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
 
 /// A string is encoded in UTF-8 and prefixed with the length in bytes as a [`u64`].
 impl Protocol for String {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<String, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let buf = Vec::read(stream).await?;
-            Ok(String::from_utf8(buf)?)
+            Ok(Self::from_utf8(buf)?)
         })
     }
 
@@ -532,9 +683,9 @@ impl Protocol for String {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<String, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let buf = Vec::read_sync(stream)?;
-        Ok(String::from_utf8(buf)?)
+        Ok(Self::from_utf8(buf)?)
     }
 
     #[cfg(feature = "write-sync")]
@@ -548,11 +699,11 @@ impl Protocol for String {
 
 /// A map is prefixed with the length as a [`u64`].
 impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'static> Protocol for BTreeMap<K, V> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<BTreeMap<K, V>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
             usize::try_from(len)?; // error here rather than panicking in the insert loop
-            let mut map = BTreeMap::default();
+            let mut map = Self::default();
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?);
             }
@@ -573,10 +724,10 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<BTreeMap<K, V>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         usize::try_from(len)?; // error here rather than panicking in the insert loop
-        let mut map = BTreeMap::default();
+        let mut map = Self::default();
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
         }
@@ -597,10 +748,10 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
 
 /// A map is prefixed with the length as a [`u64`].
 impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol for HashMap<K, V> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<HashMap<K, V>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut map = HashMap::with_capacity(len.try_into()?);
+            let mut map = Self::with_capacity(len.try_into()?);
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?);
             }
@@ -621,9 +772,9 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<HashMap<K, V>, ReadError> {
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut map = HashMap::with_capacity(len.try_into()?);
+        let mut map = Self::with_capacity(len.try_into()?);
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
         }
@@ -647,17 +798,17 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
 /// Note that due to a restriction in the type system, writing a borrowed cow requires cloning it.
 impl<'cow, B: ToOwned + Sync + ?Sized> Protocol for std::borrow::Cow<'cow, B>
 where B::Owned: Protocol + Send + Sync {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<std::borrow::Cow<'cow, B>, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            Ok(std::borrow::Cow::Owned(B::Owned::read(stream).await?))
+            Ok(Self::Owned(B::Owned::read(stream).await?))
         })
     }
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
             match self {
-                std::borrow::Cow::Borrowed(borrowed) => (*borrowed).to_owned().write(sink).await?,
-                std::borrow::Cow::Owned(owned) => owned.write(sink).await?,
+                Self::Borrowed(borrowed) => (*borrowed).to_owned().write(sink).await?,
+                Self::Owned(owned) => owned.write(sink).await?,
             }
             Ok(())
         })
@@ -665,16 +816,16 @@ where B::Owned: Protocol + Send + Sync {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<std::borrow::Cow<'cow, B>, ReadError> {
-        Ok(std::borrow::Cow::Owned(B::Owned::read_sync(stream)?))
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(Self::Owned(B::Owned::read_sync(stream)?))
     }
 
     #[cfg(feature = "write-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         match self {
-            std::borrow::Cow::Borrowed(borrowed) => (*borrowed).to_owned().write_sync(sink)?,
-            std::borrow::Cow::Owned(owned) => owned.write_sync(sink)?,
+            Self::Borrowed(borrowed) => (*borrowed).to_owned().write_sync(sink)?,
+            Self::Owned(owned) => owned.write_sync(sink)?,
         }
         Ok(())
     }
@@ -684,9 +835,9 @@ macro_rules! impl_protocol_nonzero {
     ($ty:ty, $primitive:ty) => {
         /// A nonzero integer is represented like its value.
         impl Protocol for $ty {
-            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<$ty, ReadError>> + Send + 'a>> {
+            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
-                    Ok(<$ty>::new(<$primitive>::read(stream).await?).ok_or(ReadError::UnknownVariant(0))?)
+                    Ok(Self::new(<$primitive>::read(stream).await?).ok_or(ReadError::UnknownVariant(0))?)
                 })
             }
 
@@ -699,8 +850,8 @@ macro_rules! impl_protocol_nonzero {
 
             #[cfg(feature = "read-sync")]
             #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-            fn read_sync(stream: &mut impl Read) -> Result<$ty, ReadError> {
-                Ok(<$ty>::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant(0))?)
+            fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+                Ok(Self::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant(0))?)
             }
 
             #[cfg(feature = "write-sync")]
@@ -726,9 +877,9 @@ impl_protocol_nonzero!(std::num::NonZeroI128, i128);
 
 /// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
 impl Protocol for std::time::Duration {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<std::time::Duration, ReadError>> + Send + 'a>> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            Ok(std::time::Duration::new(u64::read(stream).await?, u32::read(stream).await?))
+            Ok(Self::new(u64::read(stream).await?, u32::read(stream).await?))
         })
     }
 
@@ -742,8 +893,8 @@ impl Protocol for std::time::Duration {
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<std::time::Duration, ReadError> {
-        Ok(std::time::Duration::new(u64::read_sync(stream)?, u32::read_sync(stream)?))
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(Self::new(u64::read_sync(stream)?, u32::read_sync(stream)?))
     }
 
     #[cfg(feature = "write-sync")]
@@ -757,4 +908,5 @@ impl Protocol for std::time::Duration {
 
 impl_protocol_for! {
     enum std::convert::Infallible {}
+    struct std::ops::RangeFull;
 }
