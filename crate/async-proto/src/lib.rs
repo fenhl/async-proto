@@ -135,7 +135,8 @@ impl fmt::Display for ReadError {
     }
 }
 
-/// The error returned from the `write` and `write_sync` methods.
+#[cfg_attr(not(feature = "write-sync"), doc = "The error returned from the [`write`](Protocol::write) method.")]
+#[cfg_attr(feature = "write-sync", doc = "The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.")]
 #[derive(Debug, From, Clone)]
 #[allow(missing_docs)]
 pub enum WriteError {
