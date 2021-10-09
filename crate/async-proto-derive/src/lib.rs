@@ -13,6 +13,7 @@ use {
     proc_macro2::Span,
     quote::quote,
     syn::{
+        Attribute,
         Data,
         DataEnum,
         DataStruct,
@@ -109,7 +110,7 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
     }
 }
 
-fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2::TokenStream {
+fn impl_protocol_inner(internal: bool, qual_ty: Path, attrs: Vec<Attribute>, data: Data) -> proc_macro2::TokenStream {
     let async_proto_crate = if internal { quote!(crate) } else { quote!(::async_proto) };
     let (impl_read, impl_write, impl_read_sync, impl_write_sync) = match data {
         Data::Struct(DataStruct { fields, .. }) => {
@@ -257,6 +258,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
         quote!()
     };
     quote! {
+        #(#attrs)*
         impl #async_proto_crate::Protocol for #qual_ty {
             fn read<'a, R: #async_proto_crate::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: &'a mut R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<Self, #async_proto_crate::ReadError>> + ::core::marker::Send + 'a>> {
                 ::std::boxed::Box::pin(async move { #impl_read })
@@ -291,15 +293,16 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
 pub fn derive_protocol(input: TokenStream) -> TokenStream {
     let DeriveInput { ident, generics, data, .. } = parse_macro_input!(input as DeriveInput);
     if generics.lt_token.is_some() || generics.where_clause.is_some() { return quote!(compile_error!("generics not supported in derive(Protocol)");).into() } //TODO
-    impl_protocol_inner(false, Path { leading_colon: None, segments: iter::once(PathSegment { ident, arguments: PathArguments::None }).collect() }, data).into()
+    impl_protocol_inner(false, Path { leading_colon: None, segments: iter::once(PathSegment { ident, arguments: PathArguments::None }).collect() }, Vec::default(), data).into()
 }
 
-struct ImplProtocolFor(Vec<(Path, Data)>);
+struct ImplProtocolFor(Vec<(Path, Vec<Attribute>, Data)>);
 
 impl Parse for ImplProtocolFor {
     fn parse(input: ParseStream<'_>) -> Result<ImplProtocolFor> {
         let mut decls = Vec::default();
         while !input.is_empty() {
+            let attrs = Attribute::parse_outer(input)?;
             let lookahead = input.lookahead1();
             decls.push(if lookahead.peek(Token![enum]) {
                 let enum_token = input.parse()?;
@@ -307,7 +310,7 @@ impl Parse for ImplProtocolFor {
                 let content;
                 let brace_token = braced!(content in input);
                 let variants = content.parse_terminated(Variant::parse)?;
-                (path, Data::Enum(DataEnum { enum_token, brace_token, variants }))
+                (path, attrs, Data::Enum(DataEnum { enum_token, brace_token, variants }))
             } else if lookahead.peek(Token![struct]) {
                 let struct_token = input.parse()?;
                 let path = input.parse()?;
@@ -328,7 +331,7 @@ impl Parse for ImplProtocolFor {
                     return Err(lookahead.error())
                 };
                 let semi_token = input.peek(Token![;]).then(|| input.parse()).transpose()?;
-                (path, Data::Struct(DataStruct { struct_token, fields, semi_token }))
+                (path, attrs, Data::Struct(DataStruct { struct_token, fields, semi_token }))
             } else {
                 return Err(lookahead.error())
             });
@@ -342,6 +345,6 @@ impl Parse for ImplProtocolFor {
 pub fn impl_protocol_for(input: TokenStream) -> TokenStream {
     let impls = parse_macro_input!(input as ImplProtocolFor)
         .0.into_iter()
-        .map(|(path, data)| impl_protocol_inner(true, path, data));
+        .map(|(path, attrs, data)| impl_protocol_inner(true, path, attrs, data));
     TokenStream::from(quote!(#(#impls)*))
 }

@@ -126,8 +126,8 @@ impl Protocol for serde_json::Number {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 impl_protocol_for! {
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
     enum serde_json::Value {
         Null,
         Bool(bool),
