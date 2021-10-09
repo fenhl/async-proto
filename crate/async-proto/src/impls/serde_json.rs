@@ -73,7 +73,7 @@ impl Protocol for serde_json::Number {
                 0 => Self::from(u64::read(stream).await?),
                 1 => Self::from(i64::read(stream).await?),
                 2 => Self::from_f64(f64::read(stream).await?).ok_or(ReadError::FloatNotFinite)?,
-                n => return Err(ReadError::UnknownVariant(n)),
+                n => return Err(ReadError::UnknownVariant8(n)),
             })
         })
     }
@@ -102,7 +102,7 @@ impl Protocol for serde_json::Number {
             0 => Self::from(u64::read_sync(stream)?),
             1 => Self::from(i64::read_sync(stream)?),
             2 => Self::from_f64(f64::read_sync(stream)?).ok_or(ReadError::FloatNotFinite)?,
-            n => return Err(ReadError::UnknownVariant(n)),
+            n => return Err(ReadError::UnknownVariant8(n)),
         })
     }
 

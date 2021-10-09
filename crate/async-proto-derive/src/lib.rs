@@ -142,10 +142,29 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                     quote!(match *self {}),
                 )
             } else {
+                let (discrim_ty, unknown_variant_variant, get_discrim) = match variants.len() {
+                    0 => unreachable!(), // empty enum handled above
+                    1..=256 => (quote!(u8), quote!(UnknownVariant8), (&|idx| {
+                        let idx = u8::try_from(idx).expect("variant index unexpectedly high");
+                        quote!(#idx)
+                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    257..=65_536 => (quote!(u16), quote!(UnknownVariant16), (&|idx| {
+                        let idx = u16::try_from(idx).expect("variant index unexpectedly high");
+                        quote!(#idx)
+                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    65_537..=4_294_967_296 => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
+                        let idx = u32::try_from(idx).expect("variant index unexpectedly high");
+                        quote!(#idx)
+                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    _ => (quote!(u64), quote!(UnknownVariant64), (&|idx| {
+                        let idx = u64::try_from(idx).expect("variant index unexpectedly high");
+                        quote!(#idx)
+                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                };
                 let read_arms = variants.iter()
                     .enumerate()
                     .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = u8::try_from(idx).expect("Protocol can't be derived for enums with more than u8::MAX variants");
+                        let idx = get_discrim(idx);
                         let read_fields = read_fields(internal, false, fields);
                         quote!(#idx => ::core::result::Result::Ok(#qual_ty::#var #read_fields))
                     })
@@ -153,7 +172,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                 let write_arms = variants.iter()
                     .enumerate()
                     .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = u8::try_from(idx).expect("Protocol can't be derived for enums with more than u8::MAX variants");
+                        let idx = get_discrim(idx);
                         let fields_pat = fields_pat(&fields);
                         let write_fields = write_fields(false, fields);
                         quote! {
@@ -167,7 +186,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                 let read_sync_arms = variants.iter()
                     .enumerate()
                     .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = u8::try_from(idx).expect("Protocol can't be derived for enums with more than u8::MAX variants");
+                        let idx = get_discrim(idx);
                         let read_fields = read_fields(internal, true, fields);
                         quote!(#idx => ::core::result::Result::Ok(#qual_ty::#var #read_fields))
                     })
@@ -175,7 +194,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                 let write_sync_arms = variants.iter()
                     .enumerate()
                     .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = u8::try_from(idx).expect("Protocol can't be derived for enums with more than u8::MAX variants");
+                        let idx = get_discrim(idx);
                         let fields_pat = fields_pat(&fields);
                         let write_fields = write_fields(true, fields);
                         quote! {
@@ -188,9 +207,9 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                     .collect_vec();
                 (
                     quote! {
-                        match <u8 as #async_proto_crate::Protocol>::read(stream).await? {
+                        match <#discrim_ty as #async_proto_crate::Protocol>::read(stream).await? {
                             #(#read_arms,)*
-                            n => ::core::result::Result::Err(#async_proto_crate::ReadError::UnknownVariant(n)),
+                            n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
                         }
                     },
                     quote! {
@@ -200,9 +219,9 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                         ::core::result::Result::Ok(())
                     },
                     quote! {
-                        match <u8 as #async_proto_crate::Protocol>::read_sync(stream)? {
+                        match <#discrim_ty as #async_proto_crate::Protocol>::read_sync(stream)? {
                             #(#read_sync_arms,)*
-                            n => ::core::result::Result::Err(#async_proto_crate::ReadError::UnknownVariant(n)),
+                            n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
                         }
                     },
                     quote! {
@@ -251,7 +270,8 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
 /// The network representation is very simple:
 ///
 /// * Attempting to read an `enum` with no variants errors immediately, without waiting for data to appear on the stream.
-/// * For non-empty `enum`s, the representation starts with a single [`u8`] representing the variant, starting with `0` for the first variant declared and so on.
+/// * For non-empty `enum`s, the representation starts with the discriminant (a number representing the variant), starting with `0` for the first variant declared and so on.
+///     * For `enum`s with up to 256 variants, the discriminant is represented as a [`u8`]. For `enums` with 257 to 65536 variants, as a [`u16`], and so on.
 /// * Then follow the `Protocol` representations of any fields of the `struct` or variant, in the order declared.
 ///
 /// This representation can waste bandwidth for some types, e.g. `struct`s with multiple [`bool`] fields. For those, you may want to implement `Protocol` manually.
@@ -259,7 +279,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
 /// # Compile errors
 ///
 /// * This macro can't be used with `union`s.
-/// * This macro currently can't be used with `enum`s with more than [`u8::MAX`] variants.
+/// * This macro currently can't be used with generics.
 #[proc_macro_derive(Protocol)]
 pub fn derive_protocol(input: TokenStream) -> TokenStream {
     let DeriveInput { ident, generics, data, .. } = parse_macro_input!(input as DeriveInput);

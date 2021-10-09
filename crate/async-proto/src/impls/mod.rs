@@ -453,7 +453,7 @@ impl Protocol for bool {
             Ok(match u8::read(stream).await? {
                 0 => false,
                 1 => true,
-                n => return Err(ReadError::UnknownVariant(n)),
+                n => return Err(ReadError::UnknownVariant8(n)),
             })
         })
     }
@@ -470,7 +470,7 @@ impl Protocol for bool {
         Ok(match u8::read_sync(stream)? {
             0 => false,
             1 => true,
-            n => return Err(ReadError::UnknownVariant(n)),
+            n => return Err(ReadError::UnknownVariant8(n)),
         })
     }
 
@@ -837,7 +837,7 @@ macro_rules! impl_protocol_nonzero {
         impl Protocol for $ty {
             fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
-                    Ok(Self::new(<$primitive>::read(stream).await?).ok_or(ReadError::UnknownVariant(0))?)
+                    Ok(Self::new(<$primitive>::read(stream).await?).ok_or(ReadError::UnknownVariant8(0))?)
                 })
             }
 
@@ -851,7 +851,7 @@ macro_rules! impl_protocol_nonzero {
             #[cfg(feature = "read-sync")]
             #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-                Ok(Self::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant(0))?)
+                Ok(Self::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant8(0))?)
             }
 
             #[cfg(feature = "write-sync")]

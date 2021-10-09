@@ -76,7 +76,13 @@ pub enum ReadError {
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
     Tungstenite(Arc<dep_tokio_tungstenite::tungstenite::Error>),
     #[from(ignore)]
-    UnknownVariant(u8),
+    UnknownVariant8(u8),
+    #[from(ignore)]
+    UnknownVariant16(u16),
+    #[from(ignore)]
+    UnknownVariant32(u32),
+    #[from(ignore)]
+    UnknownVariant64(u64),
     Utf8(FromUtf8Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
@@ -117,7 +123,10 @@ impl fmt::Display for ReadError {
             ReadError::ReadNever => write!(f, "attempted to read an empty type"),
             #[cfg(feature = "tokio-tungstenite")]
             ReadError::Tungstenite(e) => write!(f, "tungstenite error: {}", e),
-            ReadError::UnknownVariant(n) => write!(f, "unknown enum variant: {}", n),
+            ReadError::UnknownVariant8(n) => write!(f, "unknown enum variant: {}", n),
+            ReadError::UnknownVariant16(n) => write!(f, "unknown enum variant: {}", n),
+            ReadError::UnknownVariant32(n) => write!(f, "unknown enum variant: {}", n),
+            ReadError::UnknownVariant64(n) => write!(f, "unknown enum variant: {}", n),
             ReadError::Utf8(e) => e.fmt(f),
             #[cfg(feature = "warp")]
             ReadError::Warp(e) => write!(f, "warp error: {}", e),
