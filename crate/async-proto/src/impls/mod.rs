@@ -45,6 +45,7 @@ use {
 #[cfg(feature = "read-sync")] use byteorder::ReadBytesExt as _;
 #[cfg(feature = "write-sync")] use byteorder::WriteBytesExt as _;
 
+#[cfg(feature = "chrono-tz")] mod chrono_tz;
 #[cfg(feature = "serde_json")] mod serde_json;
 
 macro_rules! impl_protocol_primitive {

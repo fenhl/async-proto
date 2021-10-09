@@ -20,6 +20,7 @@ use {
 };
 #[cfg(any(feature = "read-sync", feature = "write-sync"))] use std::io::prelude::*;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 impl Protocol for serde_json::Map<String, serde_json::Value> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -66,6 +67,7 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 impl Protocol for serde_json::Number {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
@@ -124,6 +126,7 @@ impl Protocol for serde_json::Number {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 impl_protocol_for! {
     enum serde_json::Value {
         Null,

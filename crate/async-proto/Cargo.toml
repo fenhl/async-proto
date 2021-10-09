@@ -27,6 +27,10 @@ version = "=0.9.0"
 version = "1"
 optional = true
 
+[dependencies.chrono-tz]
+version = "0.6"
+optional = true
+
 [dependencies.derive_more]
 version = "0.99"
 default-features = false

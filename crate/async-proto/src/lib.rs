@@ -7,18 +7,19 @@
 //!
 //! The main feature is the [`Protocol`] trait, which allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
 //!
-//! `Protocol` can be derived for `enum`s and `struct`s if all fields implement `Protocol`.
+//! [`Protocol`] can be derived for `enum`s and `struct`s if all fields implement [`Protocol`].
 //!
 //! # Features
 //!
 //! The following features can be enabled via Cargo:
 //!
 //! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
-//! * `read-sync`: Adds a blocking `read_sync` method to the `Protocol` trait.
-//! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements `Protocol` for its `Value`, `Map`, and `Number` types.
-//! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing `Protocol` types from/to its websockets.
-//! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing `Protocol` types from/to its websockets.
-//! * `write-sync`: Adds a blocking `write_sync` method to the `Protocol` trait.
+//! * `chrono-tz`: Adds a dependency on the [`chrono-tz`](https://docs.rs/chrono-tz) crate and implements [`Protocol`] for its [`Tz`](https://docs.rs/chrono-tz/*/chrono_tz/enum.Tz.html) type.
+//! * `read-sync`: Adds a blocking `read_sync` method to the [`Protocol`] trait.
+//! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements [`Protocol`] for its [`Value`](https://docs.rs/serde_json/*/serde_json/enum.Value.html), [`Map`](https://docs.rs/serde_json/*/serde_json/struct.Map.html), and [`Number`](https://docs.rs/serde_json/*/serde_json/struct.Number.html) types.
+//! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
+//! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
+//! * `write-sync`: Adds a blocking `write_sync` method to the [`Protocol`] trait.
 
 use {
     std::{
