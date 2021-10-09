@@ -152,10 +152,17 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, data: Data) -> proc_macro2
                         let idx = u16::try_from(idx).expect("variant index unexpectedly high");
                         quote!(#idx)
                     }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    #[cfg(target_pointer_width = "32")]
+                    _ => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
+                        let idx = u32::try_from(idx).expect("variant index unexpectedly high");
+                        quote!(#idx)
+                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    #[cfg(target_pointer_width = "64")]
                     65_537..=4_294_967_296 => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
                         let idx = u32::try_from(idx).expect("variant index unexpectedly high");
                         quote!(#idx)
                     }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    #[cfg(target_pointer_width = "64")]
                     _ => (quote!(u64), quote!(UnknownVariant64), (&|idx| {
                         let idx = u64::try_from(idx).expect("variant index unexpectedly high");
                         quote!(#idx)
