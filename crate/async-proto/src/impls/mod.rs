@@ -347,105 +347,51 @@ impl_protocol_tuple!(A, B, C, D, E, F, G, H, I, J);
 impl_protocol_tuple!(A, B, C, D, E, F, G, H, I, J, K);
 impl_protocol_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 
-macro_rules! impl_protocol_array {
-    ($n:literal $(, $ty:ident)+) => {
-        #[allow(unused)]
-        impl<T: Protocol + Send + Sync> Protocol for [T; $n] {
-            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-                Box::pin(async move {
-                    Ok([
-                        $($ty::read(stream).await?,)+
-                    ])
-                })
-            }
-
-            fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-                Box::pin(async move {
-                    for elt in self {
-                        elt.write(sink).await?;
-                    }
-                    Ok(())
-                })
-            }
-
-            #[cfg(feature = "read-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-            fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-                Ok([
-                    $($ty::read_sync(stream)?,)+
-                ])
-            }
-
-            #[cfg(feature = "write-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-            fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-                for elt in self {
-                    elt.write_sync(sink)?;
-                }
-                Ok(())
-            }
-        }
-    };
-}
-
-impl<T> Protocol for [T; 0] {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(_: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            Ok([])
+            let mut vec = Vec::with_capacity(N);
+            for _ in 0..N {
+                vec.push(T::read(stream).await?);
+            }
+            Ok(match vec.try_into() {
+                Ok(array) => array,
+                Err(_) => panic!("wrong array length"),
+            })
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, _: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
+            for elt in self {
+                elt.write(sink).await?;
+            }
             Ok(())
         })
     }
 
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(_: &mut impl Read) -> Result<Self, ReadError> {
-        Ok([])
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        let mut vec = Vec::with_capacity(N);
+        for _ in 0..N {
+            vec.push(T::read_sync(stream)?);
+        }
+        Ok(match vec.try_into() {
+            Ok(array) => array,
+            Err(_) => panic!("wrong array length"),
+        })
     }
 
     #[cfg(feature = "write-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, _: &mut impl Write) -> Result<(), WriteError> {
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        for elt in self {
+            elt.write_sync(sink)?;
+        }
         Ok(())
     }
 }
-
-impl_protocol_array!(1, T);
-impl_protocol_array!(2, T, T);
-impl_protocol_array!(3, T, T, T);
-impl_protocol_array!(4, T, T, T, T);
-impl_protocol_array!(5, T, T, T, T, T);
-impl_protocol_array!(6, T, T, T, T, T, T);
-impl_protocol_array!(7, T, T, T, T, T, T, T);
-impl_protocol_array!(8, T, T, T, T, T, T, T, T);
-impl_protocol_array!(9, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(10, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(11, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(12, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(13, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(14, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(15, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(16, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(17, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(18, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(19, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(20, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(21, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(22, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(23, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(24, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(25, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(26, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(27, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(28, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(29, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(30, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(31, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
-impl_protocol_array!(32, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T);
 
 /// Represented as one byte, with `0` for `false` and `1` for `true`.
 impl Protocol for bool {
