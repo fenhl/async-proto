@@ -46,7 +46,10 @@ use {
         TryStreamExt as _,
     },
 };
-pub use async_proto_derive::Protocol;
+pub use async_proto_derive::{
+    Protocol,
+    bitflags,
+};
 #[doc(hidden)] pub use { // used in proc macro
     derive_more,
     tokio,

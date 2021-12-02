@@ -245,7 +245,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, attrs: Vec<Attribute>, dat
     };
     let read_sync = if cfg!(feature = "read-sync") {
         quote! {
-            fn read_sync(mut stream: &mut impl ::std::io::Read) -> Result<Self, #async_proto_crate::ReadError> { #impl_read_sync }
+            fn read_sync(mut stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, #async_proto_crate::ReadError> { #impl_read_sync }
         }
     } else {
         quote!()
@@ -291,7 +291,7 @@ fn impl_protocol_inner(internal: bool, qual_ty: Path, attrs: Vec<Attribute>, dat
 /// * This macro currently can't be used with generics.
 #[proc_macro_derive(Protocol)]
 pub fn derive_protocol(input: TokenStream) -> TokenStream {
-    let DeriveInput { ident, generics, data, .. } = parse_macro_input!(input as DeriveInput);
+    let DeriveInput { ident, generics, data, .. } = parse_macro_input!(input);
     if generics.lt_token.is_some() || generics.where_clause.is_some() { return quote!(compile_error!("generics not supported in derive(Protocol)");).into() } //TODO
     impl_protocol_inner(false, Path { leading_colon: None, segments: iter::once(PathSegment { ident, arguments: PathArguments::None }).collect() }, Vec::default(), data).into()
 }
@@ -347,4 +347,62 @@ pub fn impl_protocol_for(input: TokenStream) -> TokenStream {
         .0.into_iter()
         .map(|(path, attrs, data)| impl_protocol_inner(true, path, attrs, data));
     TokenStream::from(quote!(#(#impls)*))
+}
+
+struct Bitflags {
+    name: Ident,
+    repr: Ident,
+}
+
+impl Parse for Bitflags {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let name = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let repr = input.parse()?;
+        Ok(Self { name, repr })
+    }
+}
+
+/// Implements `Protocol` for a type defined using the [`bitflags::bitflags`](https://docs.rs/bitflags/latest/bitflags/macro.bitflags.html) macro.
+///
+/// The type will be read via `from_bits_truncate`, dropping any bits that do not correspond to flags.
+#[proc_macro]
+pub fn bitflags(input: TokenStream) -> TokenStream {
+    let Bitflags { name, repr } = parse_macro_input!(input);
+    let read_sync = if cfg!(feature = "read-sync") {
+        quote! {
+            fn read_sync(stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, ::async_proto::ReadError> {
+                Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read_sync(stream)?))
+            }
+        }
+    } else {
+        quote!()
+    };
+    let write_sync = if cfg!(feature = "write-sync") {
+        quote! {
+            fn write_sync(&self, sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), ::async_proto::WriteError> {
+                <#repr as ::async_proto::Protocol>::write_sync(&self.bits(), sink)
+            }
+        }
+    } else {
+        quote!()
+    };
+    TokenStream::from(quote! {
+        impl ::async_proto::Protocol for #name {
+            fn read<'a, R: ::async_proto::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: &'a mut R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<Self, ::async_proto::ReadError>> + ::core::marker::Send + 'a>> {
+                ::std::boxed::Box::pin(async move {
+                    Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read(stream).await?))
+                })
+            }
+
+            fn write<'a, W: ::async_proto::tokio::io::AsyncWrite + ::core::marker::Unpin + ::core::marker::Send + 'a>(&'a self, sink: &'a mut W) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<(), ::async_proto::WriteError>> + ::core::marker::Send + 'a>> {
+                ::std::boxed::Box::pin(async move {
+                    <#repr as ::async_proto::Protocol>::write(&self.bits(), sink).await
+                })
+            }
+
+            #read_sync
+            #write_sync
+        }
+    })
 }
