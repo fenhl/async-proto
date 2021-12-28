@@ -366,6 +366,21 @@ impl Parse for Bitflags {
 /// Implements `Protocol` for a type defined using the [`bitflags::bitflags`](https://docs.rs/bitflags/latest/bitflags/macro.bitflags.html) macro.
 ///
 /// The type will be read via `from_bits_truncate`, dropping any bits that do not correspond to flags.
+///
+/// # Usage
+///
+/// ```rust
+/// bitflags::bitflags! {
+///     struct Flags: u32 {
+///         const A = 0b00000001;
+///         const B = 0b00000010;
+///         const C = 0b00000100;
+///         const ABC = Self::A.bits | Self::B.bits | Self::C.bits;
+///     }
+/// }
+///
+/// async_proto::bitflags!(Flags: u32);
+/// ```
 #[proc_macro]
 pub fn bitflags(input: TokenStream) -> TokenStream {
     let Bitflags { name, repr } = parse_macro_input!(input);
