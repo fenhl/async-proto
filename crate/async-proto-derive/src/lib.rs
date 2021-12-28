@@ -365,7 +365,7 @@ impl Parse for Bitflags {
 
 /// Implements `Protocol` for a type defined using the [`bitflags::bitflags`](https://docs.rs/bitflags/latest/bitflags/macro.bitflags.html) macro.
 ///
-/// The type will be read via `from_bits_truncate`, dropping any bits that do not correspond to flags.
+/// The type will be read via [`from_bits_truncate`](https://docs.rs/bitflags/latest/bitflags/example_generated/struct.Flags.html#method.from_bits_truncate), dropping any bits that do not correspond to flags.
 ///
 /// # Usage
 ///
