@@ -138,6 +138,8 @@ impl fmt::Display for ReadError {
     }
 }
 
+impl std::error::Error for ReadError {} //TODO use thiserror for better sources?
+
 #[cfg_attr(not(feature = "write-sync"), doc = "The error returned from the [`write`](Protocol::write) method.")]
 #[cfg_attr(feature = "write-sync", doc = "The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.")]
 #[derive(Debug, From, Clone)]
@@ -191,6 +193,8 @@ impl fmt::Display for WriteError {
         }
     }
 }
+
+impl std::error::Error for WriteError {} //TODO use thiserror for better sources?
 
 /// This trait allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
 pub trait Protocol: Sized {
