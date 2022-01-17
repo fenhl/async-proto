@@ -11,7 +11,10 @@ use {
     itertools::Itertools as _,
     proc_macro::TokenStream,
     proc_macro2::Span,
-    quote::quote,
+    quote::{
+        quote,
+        quote_spanned,
+    },
     syn::{
         Attribute,
         Data,
@@ -36,6 +39,7 @@ use {
             Result,
         },
         parse_macro_input,
+        spanned::Spanned as _,
         token::{
             Brace,
             Paren,
@@ -50,16 +54,16 @@ fn read_fields(internal: bool, sync: bool, fields: &Fields) -> proc_macro2::Toke
         Fields::Unit => quote!(),
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
             let read_fields = unnamed.iter()
-                .map(|Field { ty, .. }| {
-                    quote!(<#ty as #async_proto_crate::Protocol>#read?)
+                .map(|Field { ty, .. }| quote_spanned! {ty.span()=>
+                    <#ty as #async_proto_crate::Protocol>#read?
                 })
                 .collect_vec();
             quote!((#(#read_fields,)*))
         }
         Fields::Named(FieldsNamed { named, .. }) => {
             let read_fields = named.iter()
-                .map(|Field { ident, ty, .. }| {
-                    quote!(#ident: <#ty as #async_proto_crate::Protocol>#read?)
+                .map(|Field { ident, ty, .. }| quote_spanned! {ty.span()=>
+                    #ident: <#ty as #async_proto_crate::Protocol>#read?
                 })
                 .collect_vec();
             quote!({ #(#read_fields,)* })
