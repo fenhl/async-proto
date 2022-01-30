@@ -11,16 +11,20 @@
 //!
 //! # Features
 //!
-//! The following features can be enabled via Cargo:
+//! This crate offers optional dependencies on the following crates to enable [`Protocol`] implementations for some of their types:
 //!
-//! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
-//! * `chrono-tz`: Adds a dependency on the [`chrono-tz`](https://docs.rs/chrono-tz) crate and implements [`Protocol`] for its [`Tz`](https://docs.rs/chrono-tz/latest/chrono_tz/enum.Tz.html) type.
-//! * `noisy_float`: Adds a dependency on the [`noisy_float`](https://docs.rs/noisy_float) crate and implements [`Protocol`] for its [`NoisyFloat`](https://docs.rs/noisy_float/latest/noisy_float/struct.NoisyFloat.html) type.
+//! * [`chrono`](https://docs.rs/chrono): [`DateTime`](https://docs.rs/chrono/latest/chrono/struct.DateTime.html), [`Utc`](https://docs.rs/chrono/latest/chrono/offset/struct.Utc.html), and [`FixedOffset`](https://docs.rs/chrono/latest/chrono/offset/struct.FixedOffset.html)
+//! * [`chrono-tz`](https://docs.rs/chrono-tz): [`Tz`](https://docs.rs/chrono-tz/latest/chrono_tz/enum.Tz.html)
+//! * [`noisy_float`](https://docs.rs/noisy_float): [`NoisyFloat`](https://docs.rs/noisy_float/latest/noisy_float/struct.NoisyFloat.html)
+//! * [`serde_json`](https://docs.rs/serde_json): [`Value`](https://docs.rs/serde_json/latest/serde_json/enum.Value.html), [`Map`](https://docs.rs/serde_json/latest/serde_json/struct.Map.html), and [`Number`](https://docs.rs/serde_json/latest/serde_json/struct.Number.html)
+//!
+//! Additionally, the following features can be enabled via Cargo:
+//!
 //! * `read-sync`: Adds a blocking `read_sync` method to the [`Protocol`] trait.
-//! * `serde_json`: Adds a dependency on the [`serde_json`](https://docs.rs/serde_json) crate and implements [`Protocol`] for its [`Value`](https://docs.rs/serde_json/latest/serde_json/enum.Value.html), [`Map`](https://docs.rs/serde_json/latest/serde_json/struct.Map.html), and [`Number`](https://docs.rs/serde_json/latest/serde_json/struct.Number.html) types.
+//! * `write-sync`: Adds a blocking `write_sync` method to the [`Protocol`] trait.
+//! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
 //! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
 //! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
-//! * `write-sync`: Adds a blocking `write_sync` method to the [`Protocol`] trait.
 
 use {
     std::{
