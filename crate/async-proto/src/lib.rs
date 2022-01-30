@@ -204,8 +204,16 @@ impl std::error::Error for WriteError {} //TODO use thiserror for better sources
 /// This trait allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
 pub trait Protocol: Sized {
     /// Reads a value of this type from an async stream.
+    ///
+    /// # Cancellation safety
+    ///
+    /// Implementations of this method are generally not cancellation safe.
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>>;
     /// Writes a value of this type to an async sink.
+    ///
+    /// # Cancellation safety
+    ///
+    /// Implementations of this method are generally not cancellation safe.
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>;
     #[cfg(feature = "read-sync")]
     #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
@@ -282,16 +290,25 @@ pub trait Protocol: Sized {
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
     /// Reads a value of this type from a [`tokio-tungstenite`](dep_tokio_tungstenite) websocket.
+    ///
+    /// # Cancellation safety
+    ///
+    /// The default implementation of this method is cancellation safe if and only if the `read-sync` feature is enabled.
     fn read_ws<'a, R: Stream<Item = Result<dep_tokio_tungstenite::tungstenite::Message, dep_tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
-            Self::read(&mut &*packet.into_data()).await
+            #[cfg(feature = "read-sync")] { Self::read_sync(&mut &*packet.into_data()) }
+            #[cfg(not(feature = "read-sync"))] { Self::read(&mut &*packet.into_data()).await }
         })
     }
 
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
     /// Writes a value of this type to a [`tokio-tungstenite`](dep_tokio_tungstenite) websocket.
+    ///
+    /// # Cancellation safety
+    ///
+    /// The default implementation of this method is not cancellation safe.
     fn write_ws<'a, W: Sink<dep_tokio_tungstenite::tungstenite::Message, Error = dep_tokio_tungstenite::tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
@@ -305,16 +322,25 @@ pub trait Protocol: Sized {
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     /// Reads a value of this type from a [`warp`](dep_warp) websocket.
+    ///
+    /// # Cancellation safety
+    ///
+    /// The default implementation of this method is cancellation safe if and only if the `read-sync` feature is enabled.
     fn read_warp<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
-            Self::read(&mut packet.as_bytes()).await
+            #[cfg(feature = "read-sync")] { Self::read_sync(&mut packet.as_bytes()) }
+            #[cfg(not(feature = "read-sync"))] { Self::read(&mut packet.as_bytes()).await }
         })
     }
 
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     /// Writes a value of this type to a [`warp`](dep_warp) websocket.
+    ///
+    /// # Cancellation safety
+    ///
+    /// The default implementation of this method is not cancellation safe.
     fn write_warp<'a, W: Sink<dep_warp::filters::ws::Message, Error = dep_warp::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
