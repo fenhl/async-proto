@@ -673,23 +673,28 @@ impl_protocol_for! {
     #[async_proto(via = F64Proxy)]
     type f64;
 
+    #[async_proto(where(Idx: Protocol + Send + Sync))]
     struct Range<Idx> {
         start: Idx,
         end: Idx,
     }
 
+    #[async_proto(where(Idx: Protocol + Send + Sync))]
     struct RangeFrom<Idx> {
         start: Idx,
     }
 
+    #[async_proto(where(Idx: Protocol + Send + Sync))]
     struct RangeTo<Idx> {
         end: Idx,
     }
 
+    #[async_proto(where(Idx: Protocol + Send + Sync))]
     struct RangeToInclusive<Idx> {
         end: Idx,
     }
 
+    #[async_proto(where(T: Protocol + Sync))]
     enum Option<T> {
         None,
         Some(T),
