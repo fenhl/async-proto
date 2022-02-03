@@ -262,6 +262,30 @@ impl Protocol for bool {
     }
 }
 
+impl<T: Protocol> Protocol for Box<T> {
+    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(T::read(stream).await?.into()) //TODO use try_new once stabilized
+        })
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        (**self).write(sink)
+    }
+
+    #[cfg(feature = "read-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Ok(T::read_sync(stream)?.into()) //TODO use try_new once stabilized
+    }
+
+    #[cfg(feature = "write-sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        (**self).write_sync(sink)
+    }
+}
+
 /// A vector is prefixed with the length as a [`u64`].
 impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
