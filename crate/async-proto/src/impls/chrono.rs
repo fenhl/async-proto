@@ -82,18 +82,18 @@ impl<'a, Tz: TimeZone> From<&'a DateTime<Tz>> for DateTimeProxy<Tz> {
 }
 
 impl_protocol_for! {
-    #[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono")))))]
     struct Utc;
 
-    #[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono")))))]
     #[async_proto(via = NaiveDateProxy)]
     type NaiveDate;
 
-    #[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono")))))]
     #[async_proto(via = FixedOffsetProxy)]
     type FixedOffset;
 
-    #[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono")))))]
     #[async_proto(via = DateTimeProxy<Tz>, where(Tz: Protocol + TimeZone + Send + Sync + 'static, Tz::Offset: Sync))]
     type DateTime<Tz: TimeZone>;
 }

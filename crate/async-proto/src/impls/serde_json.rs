@@ -102,7 +102,7 @@ impl<'a> From<&'a serde_json::Number> for NumberProxy {
 }
 
 impl_protocol_for! {
-    #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "serde_json")))))]
     enum serde_json::Value {
         Null,
         Bool(bool),
@@ -112,7 +112,7 @@ impl_protocol_for! {
         Object(serde_json::Map<String, serde_json::Value>),
     }
 
-    #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "serde_json")))))]
     #[async_proto(via = NumberProxy)]
     type serde_json::Number;
 }

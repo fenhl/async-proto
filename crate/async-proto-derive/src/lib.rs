@@ -95,6 +95,7 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
 }
 
 enum AsyncProtoAttr {
+    Attr(Punctuated<Meta, Token![,]>),
     Internal,
     MapErr(Expr),
     Via(Type),
@@ -111,6 +112,11 @@ impl Parse for AsyncProtoAttr {
         } else {
             let ident = input.parse::<Ident>()?;
             match &*ident.to_string() {
+                "attr" => {
+                    let content;
+                    parenthesized!(content in input);
+                    Self::Attr(content.parse_terminated(Meta::parse)?)
+                }
                 "internal" => Self::Internal,
                 "map_err" => {
                     let _ = input.parse::<Token![=]>()?;
@@ -127,14 +133,15 @@ impl Parse for AsyncProtoAttr {
 }
 
 fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path, generics: Generics, data: Option<Data>) -> proc_macro2::TokenStream {
-    let (async_proto_attrs, attrs) = attrs.into_iter().partition::<Vec<_>, _>(|attr| attr.path.is_ident("async_proto"));
     let mut via = None;
     let mut map_err = None;
     let mut where_predicates = None;
-    for attr in async_proto_attrs {
+    let mut impl_attrs = Vec::default();
+    for attr in attrs.into_iter().filter(|attr| attr.path.is_ident("async_proto")) {
         match attr.parse_args_with(Punctuated::<AsyncProtoAttr, Token![,]>::parse_terminated) {
             Ok(attrs) => for attr in attrs {
                 match attr {
+                    AsyncProtoAttr::Attr(attr) => impl_attrs.extend(attr),
                     AsyncProtoAttr::Internal => internal = true,
                     AsyncProtoAttr::MapErr(expr) => if map_err.replace(expr).is_some() {
                         return quote!(compile_error!("#[async_proto(map_err = ...)] specified multiple times");).into()
@@ -323,7 +330,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
     };
     let (impl_generics, ty_generics, where_clause) = impl_generics.split_for_impl();
     quote! {
-        #(#attrs)*
+        #(#[#impl_attrs])*
         impl #impl_generics #async_proto_crate::Protocol for #qual_ty #ty_generics #where_clause {
             fn read<'a, R: #async_proto_crate::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: &'a mut R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<Self, #async_proto_crate::ReadError>> + ::core::marker::Send + 'a>> {
                 ::std::boxed::Box::pin(async move { #impl_read })
@@ -354,6 +361,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
 ///
 /// This macro's behavior can be modified using attributes. Multiple attributes can be specified as `#[async_proto(attr1, attr2, ...)]` or `#[async_proto(attr1)] #[async_proto(attr2)] ...`. The following attributes are available:
 ///
+/// * `#[async_proto(attr(...))]`: Adds the given attribute(s) to the `Protocol` implementation. For example, the implementation can be documented using `#[async_proto(attr(doc = "..."))]`. May be specified multiple times.
 /// * `#[async_proto(via = Proxy)]`: Implements `Protocol` for this type (let's call it `T`) in terms of another type (`Proxy` in this case) instead of using the variant- and field-based representation described above. `&'a T` must implement `Into<Proxy>` for all `'a`, and `Proxy` must implement `Protocol` and `TryInto<T>` with an `Error` type that implements `Into<ReadError>`.
 ///     * `#[async_proto(map_err = ...)]`: Removes the requirement for `<Proxy as TryInto<T>>::Error` to implement `Into<ReadError>` and instead uses the given expression (which should be an `FnOnce(<Proxy as TryInto<T>>::Error) -> ReadError`) to convert the error.
 /// * `#[async_proto(where(...))]`: Overrides the bounds for the generated `Protocol` implementation. The default is to require `Protocol + Send + Sync + 'static` for each type parameter of this type.

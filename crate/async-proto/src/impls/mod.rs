@@ -689,11 +689,11 @@ impl<'a> From<&'a std::time::Duration> for DurationProxy {
 }
 
 impl_protocol_for! {
-    /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
+    #[async_proto(attr(doc = "Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format."))]
     #[async_proto(via = F32Proxy)]
     type f32;
 
-    /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
+    #[async_proto(attr(doc = "Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format."))]
     #[async_proto(via = F64Proxy)]
     type f64;
 
@@ -737,7 +737,7 @@ impl_protocol_for! {
 
     struct std::ops::RangeFull;
 
-    /// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
+    #[async_proto(attr(doc = "A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`]."))]
     #[async_proto(via = DurationProxy)]
     type std::time::Duration;
 }

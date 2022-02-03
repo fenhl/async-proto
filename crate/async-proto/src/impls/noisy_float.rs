@@ -33,7 +33,7 @@ impl<'a, F: Float, C: FloatChecker<F>> From<&'a NoisyFloat<F, C>> for NoisyFloat
 }
 
 impl_protocol_for! {
-    #[cfg_attr(docsrs, doc(cfg(feature = "noisy_float")))]
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "noisy_float")))))]
     /// A noisy float is represented like its underlying type. Reading an invalid float produces a [`ReadError::Custom`].
     #[async_proto(via = NoisyFloatProxy<F>, where(F: Protocol + Float + Send + Sync + 'static, C: FloatChecker<F> + Send + Sync))]
     type NoisyFloat<F: Float, C: FloatChecker<F>>;

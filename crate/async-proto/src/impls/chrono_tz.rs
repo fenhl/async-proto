@@ -28,8 +28,8 @@ impl<'a> From<&'a chrono_tz::Tz> for TzProxy {
 }
 
 impl_protocol_for! {
-    #[cfg_attr(docsrs, doc(cfg(feature = "chrono-tz")))]
-    /// A timezone is represented as an [IANA timezone identifier](https://data.iana.org/time-zones/theory.html#naming).
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono-tz")))))]
+    #[async_proto(attr(doc = "A timezone is represented as an [IANA timezone identifier](https://data.iana.org/time-zones/theory.html#naming)."))]
     #[async_proto(via = TzProxy)]
     type chrono_tz::Tz;
 }
