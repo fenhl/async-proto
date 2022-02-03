@@ -703,17 +703,17 @@ impl_protocol_for! {
         end: Idx,
     }
 
-    #[async_proto(where(Idx: Protocol + Send + Sync))]
+    #[async_proto(where(Idx: Protocol + Sync))]
     struct RangeFrom<Idx> {
         start: Idx,
     }
 
-    #[async_proto(where(Idx: Protocol + Send + Sync))]
+    #[async_proto(where(Idx: Protocol + Sync))]
     struct RangeTo<Idx> {
         end: Idx,
     }
 
-    #[async_proto(where(Idx: Protocol + Send + Sync))]
+    #[async_proto(where(Idx: Protocol + Sync))]
     struct RangeToInclusive<Idx> {
         end: Idx,
     }
