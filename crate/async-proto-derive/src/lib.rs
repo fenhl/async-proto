@@ -13,32 +13,11 @@ use {
         quote_spanned,
     },
     syn::{
-        Attribute,
-        Data,
-        DataEnum,
-        DataStruct,
-        DeriveInput,
-        Field,
-        Fields,
-        FieldsUnnamed,
-        FieldsNamed,
-        Generics,
-        Ident,
-        Path,
-        Token,
-        Type,
-        Variant,
-        WherePredicate,
-        braced,
-        parenthesized,
+        *,
         parse::{
-            Error,
             Parse,
             ParseStream,
-            Result,
         },
-        parse_macro_input,
-        parse_quote,
         punctuated::Punctuated,
         spanned::Spanned as _,
         token::{
@@ -147,24 +126,26 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
     let mut via = None;
     let mut where_predicates = None;
     for attr in async_proto_attrs {
-        match attr.parse_args() {
-            Ok(AsyncProtoAttr::Internal) => internal = true,
-            Ok(AsyncProtoAttr::Via(ty)) => if via.replace(ty).is_some() {
-                return quote!(compile_error!("#[async_proto(via = ...)] specified multiple times");).into()
-            },
-            Ok(AsyncProtoAttr::Where(predicates)) => if where_predicates.replace(predicates).is_some() {
-                return quote!(compile_error!("#[async_proto(where(...))] specified multiple times");).into()
+        match attr.parse_args_with(Punctuated::<AsyncProtoAttr, Token![,]>::parse_terminated) {
+            Ok(attrs) => for attr in attrs {
+                match attr {
+                    AsyncProtoAttr::Internal => internal = true,
+                    AsyncProtoAttr::Via(ty) => if via.replace(ty).is_some() {
+                        return quote!(compile_error!("#[async_proto(via = ...)] specified multiple times");).into()
+                    },
+                    AsyncProtoAttr::Where(predicates) => if where_predicates.replace(predicates).is_some() {
+                        return quote!(compile_error!("#[async_proto(where(...))] specified multiple times");).into()
+                    },
+                }
             },
             Err(e) => return e.to_compile_error().into(),
         }
     }
     let async_proto_crate = if internal { quote!(crate) } else { quote!(::async_proto) };
-    let impl_generics = if let Some(predicates) = where_predicates {
-        let mut impl_generics = generics.clone();
+    let mut impl_generics = generics.clone();
+    if let Some(predicates) = where_predicates {
         impl_generics.make_where_clause().predicates.extend(predicates);
-        impl_generics
     } else {
-        let mut impl_generics = generics.clone();
         for param in impl_generics.type_params_mut() {
             param.colon_token.get_or_insert_with(<Token![:]>::default);
             param.bounds.push(parse_quote!(#async_proto_crate::Protocol));
@@ -172,15 +153,14 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
             param.bounds.push(parse_quote!(::core::marker::Sync));
             param.bounds.push(parse_quote!('static));
         }
-        impl_generics
     };
     let (impl_read, impl_write, impl_read_sync, impl_write_sync) = match (via, data) {
         (Some(_), Some(_)) => return quote!(compile_error!("redundent type layout specification with #[async_proto(via = ...)]");).into(),
         (Some(proxy_ty), None) => (
-            quote!(<#qual_ty as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read(stream).await?).map_err(<#async_proto_crate::ReadError as ::core::convert::From<_>>::from)),
-            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write(&<#proxy_ty as ::core::convert::From<&'a #qual_ty>>::from(self), sink).await),
-            quote!(<#qual_ty as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(<#async_proto_crate::ReadError as ::core::convert::From<_>>::from)),
-            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write_sync(&<#proxy_ty as ::core::convert::From<&#qual_ty>>::from(self), sink)),
+            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read(stream).await?).map_err(<#async_proto_crate::ReadError as ::core::convert::From<_>>::from)),
+            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write(&<#proxy_ty as ::core::convert::From<&'a Self>>::from(self), sink).await),
+            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(<#async_proto_crate::ReadError as ::core::convert::From<_>>::from)),
+            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write_sync(&<#proxy_ty as ::core::convert::From<&Self>>::from(self), sink)),
         ),
         (None, Some(Data::Struct(DataStruct { fields, .. }))) => {
             let fields_pat = fields_pat(&fields);
@@ -189,15 +169,15 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
             let read_fields_sync = read_fields(internal, true, &fields);
             let write_fields_sync = write_fields(true, &fields);
             (
-                quote!(::core::result::Result::Ok(#qual_ty #read_fields_async)),
+                quote!(::core::result::Result::Ok(Self #read_fields_async)),
                 quote! {
-                    let #qual_ty #fields_pat = self;
+                    let Self #fields_pat = self;
                     #write_fields_async
                     ::core::result::Result::Ok(())
                 },
-                quote!(::core::result::Result::Ok(#qual_ty #read_fields_sync)),
+                quote!(::core::result::Result::Ok(Self #read_fields_sync)),
                 quote! {
-                    let #qual_ty #fields_pat = self;
+                    let Self #fields_pat = self;
                     #write_fields_sync
                     ::core::result::Result::Ok(())
                 },
@@ -243,7 +223,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                     .map(|(idx, Variant { ident: var, fields, .. })| {
                         let idx = get_discrim(idx);
                         let read_fields = read_fields(internal, false, fields);
-                        quote!(#idx => ::core::result::Result::Ok(#qual_ty::#var #read_fields))
+                        quote!(#idx => ::core::result::Result::Ok(Self::#var #read_fields))
                     })
                     .collect_vec();
                 let write_arms = variants.iter()
@@ -253,7 +233,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                         let fields_pat = fields_pat(&fields);
                         let write_fields = write_fields(false, fields);
                         quote! {
-                            #qual_ty::#var #fields_pat => {
+                            Self::#var #fields_pat => {
                                 #idx.write(sink).await?;
                                 #write_fields
                             }
@@ -265,7 +245,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                     .map(|(idx, Variant { ident: var, fields, .. })| {
                         let idx = get_discrim(idx);
                         let read_fields = read_fields(internal, true, fields);
-                        quote!(#idx => ::core::result::Result::Ok(#qual_ty::#var #read_fields))
+                        quote!(#idx => ::core::result::Result::Ok(Self::#var #read_fields))
                     })
                     .collect_vec();
                 let write_sync_arms = variants.iter()
@@ -275,7 +255,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                         let fields_pat = fields_pat(&fields);
                         let write_fields = write_fields(true, fields);
                         quote! {
-                            #qual_ty::#var #fields_pat => {
+                            Self::#var #fields_pat => {
                                 #idx.write_sync(sink)?;
                                 #write_fields
                             }
@@ -379,7 +359,7 @@ impl Parse for ImplProtocolFor {
             let lookahead = input.lookahead1();
             decls.push(if lookahead.peek(Token![enum]) {
                 let enum_token = input.parse()?;
-                let path = input.parse()?;
+                let path = Path::parse_mod_style(input)?;
                 let generics = input.parse()?;
                 let content;
                 let brace_token = braced!(content in input);
@@ -387,7 +367,7 @@ impl Parse for ImplProtocolFor {
                 (attrs, path, generics, Some(Data::Enum(DataEnum { enum_token, brace_token, variants })))
             } else if lookahead.peek(Token![struct]) {
                 let struct_token = input.parse()?;
-                let path = input.parse()?;
+                let path = Path::parse_mod_style(input)?;
                 let generics = input.parse()?;
                 let lookahead = input.lookahead1();
                 let fields = if lookahead.peek(Token![;]) {
@@ -409,7 +389,7 @@ impl Parse for ImplProtocolFor {
                 (attrs, path, generics, Some(Data::Struct(DataStruct { struct_token, fields, semi_token })))
             } else if lookahead.peek(Token![type]) {
                 let _ = input.parse::<Token![type]>()?;
-                let path = input.parse()?;
+                let path = Path::parse_mod_style(input)?;
                 let generics = input.parse()?;
                 let _ = input.parse::<Token![;]>()?;
                 (attrs, path, generics, None)
