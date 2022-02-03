@@ -724,6 +724,12 @@ impl_protocol_for! {
         Some(T),
     }
 
+    #[async_proto(where(T: Protocol + Sync, E: Protocol + Sync))]
+    enum Result<T, E> {
+        Ok(T),
+        Err(E),
+    }
+
     enum std::convert::Infallible {}
 
     #[async_proto(where(T: Sync))]
