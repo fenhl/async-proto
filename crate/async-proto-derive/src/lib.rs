@@ -154,144 +154,147 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
             param.bounds.push(parse_quote!('static));
         }
     };
-    let (impl_read, impl_write, impl_read_sync, impl_write_sync) = match (via, data) {
-        (Some(_), Some(_)) => return quote!(compile_error!("redundent type layout specification with #[async_proto(via = ...)]");).into(),
-        (Some(proxy_ty), None) => (
-            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read(stream).await?).map_err(<#async_proto_crate::ReadError as ::core::convert::From<_>>::from)),
-            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write(&<#proxy_ty as ::core::convert::From<&'a Self>>::from(self), sink).await),
-            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(<#async_proto_crate::ReadError as ::core::convert::From<_>>::from)),
-            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write_sync(&<#proxy_ty as ::core::convert::From<&Self>>::from(self), sink)),
-        ),
-        (None, Some(Data::Struct(DataStruct { fields, .. }))) => {
-            let fields_pat = fields_pat(&fields);
-            let read_fields_async = read_fields(internal, false, &fields);
-            let write_fields_async = write_fields(false, &fields);
-            let read_fields_sync = read_fields(internal, true, &fields);
-            let write_fields_sync = write_fields(true, &fields);
-            (
-                quote!(::core::result::Result::Ok(Self #read_fields_async)),
-                quote! {
-                    let Self #fields_pat = self;
-                    #write_fields_async
-                    ::core::result::Result::Ok(())
-                },
-                quote!(::core::result::Result::Ok(Self #read_fields_sync)),
-                quote! {
-                    let Self #fields_pat = self;
-                    #write_fields_sync
-                    ::core::result::Result::Ok(())
-                },
-            )
-        }
-        (None, Some(Data::Enum(DataEnum { variants, .. }))) => {
-            if variants.is_empty() {
+    let (impl_read, impl_write, impl_read_sync, impl_write_sync) = if let Some(proxy_ty) = via {
+        if internal && data.is_some() { return quote!(compile_error!("redundant type layout specification with #[async_proto(via = ...)]");).into() }
+        (
+            quote!(<#proxy_ty as ::core::convert::TryInto<Self>>::try_into(<#proxy_ty as #async_proto_crate::Protocol>::read(stream).await?).map_err(::core::convert::Into::<#async_proto_crate::ReadError>::into)),
+            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write(&<&'a Self as ::core::convert::Into<#proxy_ty>>::into(self), sink).await),
+            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(::core::convert::Into::<#async_proto_crate::ReadError>::into)),
+            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write_sync(&<&Self as ::core::convert::Into<#proxy_ty>>::into(self), sink)),
+        )
+    } else {
+        match data {
+            Some(Data::Struct(DataStruct { fields, .. })) => {
+                let fields_pat = fields_pat(&fields);
+                let read_fields_async = read_fields(internal, false, &fields);
+                let write_fields_async = write_fields(false, &fields);
+                let read_fields_sync = read_fields(internal, true, &fields);
+                let write_fields_sync = write_fields(true, &fields);
                 (
-                    quote!(::core::result::Result::Err(#async_proto_crate::ReadError::ReadNever)),
-                    quote!(match *self {}),
-                    quote!(::core::result::Result::Err(#async_proto_crate::ReadError::ReadNever)),
-                    quote!(match *self {}),
-                )
-            } else {
-                let (discrim_ty, unknown_variant_variant, get_discrim) = match variants.len() {
-                    0 => unreachable!(), // empty enum handled above
-                    1..=256 => (quote!(u8), quote!(UnknownVariant8), (&|idx| {
-                        let idx = u8::try_from(idx).expect("variant index unexpectedly high");
-                        quote!(#idx)
-                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
-                    257..=65_536 => (quote!(u16), quote!(UnknownVariant16), (&|idx| {
-                        let idx = u16::try_from(idx).expect("variant index unexpectedly high");
-                        quote!(#idx)
-                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
-                    #[cfg(target_pointer_width = "32")]
-                    _ => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
-                        let idx = u32::try_from(idx).expect("variant index unexpectedly high");
-                        quote!(#idx)
-                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
-                    #[cfg(target_pointer_width = "64")]
-                    65_537..=4_294_967_296 => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
-                        let idx = u32::try_from(idx).expect("variant index unexpectedly high");
-                        quote!(#idx)
-                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
-                    #[cfg(target_pointer_width = "64")]
-                    _ => (quote!(u64), quote!(UnknownVariant64), (&|idx| {
-                        let idx = u64::try_from(idx).expect("variant index unexpectedly high");
-                        quote!(#idx)
-                    }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
-                };
-                let read_arms = variants.iter()
-                    .enumerate()
-                    .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = get_discrim(idx);
-                        let read_fields = read_fields(internal, false, fields);
-                        quote!(#idx => ::core::result::Result::Ok(Self::#var #read_fields))
-                    })
-                    .collect_vec();
-                let write_arms = variants.iter()
-                    .enumerate()
-                    .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = get_discrim(idx);
-                        let fields_pat = fields_pat(&fields);
-                        let write_fields = write_fields(false, fields);
-                        quote! {
-                            Self::#var #fields_pat => {
-                                #idx.write(sink).await?;
-                                #write_fields
-                            }
-                        }
-                    })
-                    .collect_vec();
-                let read_sync_arms = variants.iter()
-                    .enumerate()
-                    .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = get_discrim(idx);
-                        let read_fields = read_fields(internal, true, fields);
-                        quote!(#idx => ::core::result::Result::Ok(Self::#var #read_fields))
-                    })
-                    .collect_vec();
-                let write_sync_arms = variants.iter()
-                    .enumerate()
-                    .map(|(idx, Variant { ident: var, fields, .. })| {
-                        let idx = get_discrim(idx);
-                        let fields_pat = fields_pat(&fields);
-                        let write_fields = write_fields(true, fields);
-                        quote! {
-                            Self::#var #fields_pat => {
-                                #idx.write_sync(sink)?;
-                                #write_fields
-                            }
-                        }
-                    })
-                    .collect_vec();
-                (
+                    quote!(::core::result::Result::Ok(Self #read_fields_async)),
                     quote! {
-                        match <#discrim_ty as #async_proto_crate::Protocol>::read(stream).await? {
-                            #(#read_arms,)*
-                            n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
-                        }
-                    },
-                    quote! {
-                        match self {
-                            #(#write_arms,)*
-                        }
+                        let Self #fields_pat = self;
+                        #write_fields_async
                         ::core::result::Result::Ok(())
                     },
+                    quote!(::core::result::Result::Ok(Self #read_fields_sync)),
                     quote! {
-                        match <#discrim_ty as #async_proto_crate::Protocol>::read_sync(stream)? {
-                            #(#read_sync_arms,)*
-                            n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
-                        }
-                    },
-                    quote! {
-                        match self {
-                            #(#write_sync_arms,)*
-                        }
+                        let Self #fields_pat = self;
+                        #write_fields_sync
                         ::core::result::Result::Ok(())
                     },
                 )
             }
+            Some(Data::Enum(DataEnum { variants, .. })) => {
+                if variants.is_empty() {
+                    (
+                        quote!(::core::result::Result::Err(#async_proto_crate::ReadError::ReadNever)),
+                        quote!(match *self {}),
+                        quote!(::core::result::Result::Err(#async_proto_crate::ReadError::ReadNever)),
+                        quote!(match *self {}),
+                    )
+                } else {
+                    let (discrim_ty, unknown_variant_variant, get_discrim) = match variants.len() {
+                        0 => unreachable!(), // empty enum handled above
+                        1..=256 => (quote!(u8), quote!(UnknownVariant8), (&|idx| {
+                            let idx = u8::try_from(idx).expect("variant index unexpectedly high");
+                            quote!(#idx)
+                        }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                        257..=65_536 => (quote!(u16), quote!(UnknownVariant16), (&|idx| {
+                            let idx = u16::try_from(idx).expect("variant index unexpectedly high");
+                            quote!(#idx)
+                        }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                        #[cfg(target_pointer_width = "32")]
+                        _ => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
+                            let idx = u32::try_from(idx).expect("variant index unexpectedly high");
+                            quote!(#idx)
+                        }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                        #[cfg(target_pointer_width = "64")]
+                        65_537..=4_294_967_296 => (quote!(u32), quote!(UnknownVariant32), (&|idx| {
+                            let idx = u32::try_from(idx).expect("variant index unexpectedly high");
+                            quote!(#idx)
+                        }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                        #[cfg(target_pointer_width = "64")]
+                        _ => (quote!(u64), quote!(UnknownVariant64), (&|idx| {
+                            let idx = u64::try_from(idx).expect("variant index unexpectedly high");
+                            quote!(#idx)
+                        }) as &dyn Fn(usize) -> proc_macro2::TokenStream),
+                    };
+                    let read_arms = variants.iter()
+                        .enumerate()
+                        .map(|(idx, Variant { ident: var, fields, .. })| {
+                            let idx = get_discrim(idx);
+                            let read_fields = read_fields(internal, false, fields);
+                            quote!(#idx => ::core::result::Result::Ok(Self::#var #read_fields))
+                        })
+                        .collect_vec();
+                    let write_arms = variants.iter()
+                        .enumerate()
+                        .map(|(idx, Variant { ident: var, fields, .. })| {
+                            let idx = get_discrim(idx);
+                            let fields_pat = fields_pat(&fields);
+                            let write_fields = write_fields(false, fields);
+                            quote! {
+                                Self::#var #fields_pat => {
+                                    #idx.write(sink).await?;
+                                    #write_fields
+                                }
+                            }
+                        })
+                        .collect_vec();
+                    let read_sync_arms = variants.iter()
+                        .enumerate()
+                        .map(|(idx, Variant { ident: var, fields, .. })| {
+                            let idx = get_discrim(idx);
+                            let read_fields = read_fields(internal, true, fields);
+                            quote!(#idx => ::core::result::Result::Ok(Self::#var #read_fields))
+                        })
+                        .collect_vec();
+                    let write_sync_arms = variants.iter()
+                        .enumerate()
+                        .map(|(idx, Variant { ident: var, fields, .. })| {
+                            let idx = get_discrim(idx);
+                            let fields_pat = fields_pat(&fields);
+                            let write_fields = write_fields(true, fields);
+                            quote! {
+                                Self::#var #fields_pat => {
+                                    #idx.write_sync(sink)?;
+                                    #write_fields
+                                }
+                            }
+                        })
+                        .collect_vec();
+                    (
+                        quote! {
+                            match <#discrim_ty as #async_proto_crate::Protocol>::read(stream).await? {
+                                #(#read_arms,)*
+                                n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
+                            }
+                        },
+                        quote! {
+                            match self {
+                                #(#write_arms,)*
+                            }
+                            ::core::result::Result::Ok(())
+                        },
+                        quote! {
+                            match <#discrim_ty as #async_proto_crate::Protocol>::read_sync(stream)? {
+                                #(#read_sync_arms,)*
+                                n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
+                            }
+                        },
+                        quote! {
+                            match self {
+                                #(#write_sync_arms,)*
+                            }
+                            ::core::result::Result::Ok(())
+                        },
+                    )
+                }
+            }
+            Some(Data::Union(_)) => return quote!(compile_error!("unions not supported in derive(Protocol)");).into(),
+            None => return quote!(compile_error!("missing type layout specification or #[async_proto(via = ...)]");).into(),
         }
-        (None, Some(Data::Union(_))) => return quote!(compile_error!("unions not supported in derive(Protocol)");).into(),
-        (None, None) => return quote!(compile_error!("missing type layout specification or #[async_proto(via = ...)]");).into(),
     };
     let read_sync = if cfg!(feature = "read-sync") {
         quote! {
@@ -338,7 +341,10 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
 ///
 /// # Attributes
 ///
-/// This macro optionally takes an `#[async_proto(where(...))]` attribute that can be used to override the bounds for the generated `Protocol` implementation. The default is to require `Protocol + Send + Sync + 'static` for each type parameter of this type.
+/// This macro's behavior can be modified using attributes. Multiple attributes can be specified as `#[async_proto(attr1, attr2, ...)]` or `#[async_proto(attr1)] #[async_proto(attr2)] ...`. The following attributes are available:
+///
+/// * `#[async_proto(via = Proxy)]`: Implements `Protocol` for this type (let's call it `T`) in terms of another type (`Proxy` in this case) instead of using the variant- and field-based representation described above. `&'a T` must implement `Into<Proxy>` for all `'a`, and `Proxy` must implement `Protocol` and `TryInto<T>` with an `Error` type that implements `Into<ReadError>`.
+/// * `#[async_proto(where(...))]`: Overrides the bounds for the generated `Protocol` implementation. The default is to require `Protocol + Send + Sync + 'static` for each type parameter of this type.
 ///
 /// # Compile errors
 ///
