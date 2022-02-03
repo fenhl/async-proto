@@ -92,119 +92,7 @@ impl_protocol_primitive!(i64, read_i64, write_i64, NetworkEndian);
 impl_protocol_primitive!(u128, read_u128, write_u128, NetworkEndian);
 impl_protocol_primitive!(i128, read_i128, write_i128, NetworkEndian);
 
-/// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
-impl Protocol for f32 {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(Self::from_be_bytes(<[u8; 4]>::read(stream).await?))
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.to_be_bytes().write(sink).await
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(stream.read_f32::<NetworkEndian>()?)
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        Ok(sink.write_f32::<NetworkEndian>(*self)?)
-    }
-}
-
-/// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
-impl Protocol for f64 {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(Self::from_be_bytes(<[u8; 8]>::read(stream).await?))
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.to_be_bytes().write(sink).await
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(stream.read_f64::<NetworkEndian>()?)
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        Ok(sink.write_f64::<NetworkEndian>(*self)?)
-    }
-}
-
-impl<Idx: Protocol + Send + Sync> Protocol for Range<Idx> { //TODO derive
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(Idx::read(stream).await?..Idx::read(stream).await?)
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.start.write(sink).await?;
-            self.end.write(sink).await?;
-            Ok(())
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(Idx::read_sync(stream)?..Idx::read_sync(stream)?)
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        self.start.write_sync(sink)?;
-        self.end.write_sync(sink)?;
-        Ok(())
-    }
-}
-
-impl<Idx: Protocol + Send + Sync> Protocol for RangeFrom<Idx> { //TODO derive
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(Idx::read(stream).await?..)
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.start.write(sink).await?;
-            Ok(())
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(Idx::read_sync(stream)?..)
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        self.start.write_sync(sink)?;
-        Ok(())
-    }
-}
-
-impl<Idx: Protocol + Send + Sync> Protocol for RangeInclusive<Idx> {
+impl<Idx: Protocol + Send + Sync> Protocol for RangeInclusive<Idx> { //TODO derive
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             Ok(Idx::read(stream).await?..=Idx::read(stream).await?)
@@ -230,62 +118,6 @@ impl<Idx: Protocol + Send + Sync> Protocol for RangeInclusive<Idx> {
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         self.start().write_sync(sink)?;
         self.end().write_sync(sink)?;
-        Ok(())
-    }
-}
-
-impl<Idx: Protocol + Send + Sync> Protocol for RangeTo<Idx> { //TODO derive
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(..Idx::read(stream).await?)
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.end.write(sink).await?;
-            Ok(())
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(..Idx::read_sync(stream)?)
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        self.end.write_sync(sink)?;
-        Ok(())
-    }
-}
-
-impl<Idx: Protocol + Send + Sync> Protocol for RangeToInclusive<Idx> { //TODO derive
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(..=Idx::read(stream).await?)
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.end.write(sink).await?;
-            Ok(())
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(..=Idx::read_sync(stream)?)
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        self.end.write_sync(sink)?;
         Ok(())
     }
 }
@@ -427,52 +259,6 @@ impl Protocol for bool {
     #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         if *self { 1u8 } else { 0 }.write_sync(sink)
-    }
-}
-
-impl<T: Protocol + Sync> Protocol for Option<T> { //TODO add support for generics to impl_protocol_for, then replace this impl
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(if bool::read(stream).await? {
-                Some(T::read(stream).await?)
-            } else {
-                None
-            })
-        })
-    }
-
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            if let Some(value) = self {
-                true.write(sink).await?;
-                value.write(sink).await?;
-            } else {
-                false.write(sink).await?;
-            }
-            Ok(())
-        })
-    }
-
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(if bool::read_sync(stream)? {
-            Some(T::read_sync(stream)?)
-        } else {
-            None
-        })
-    }
-
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        if let Some(value) = self {
-            true.write_sync(sink)?;
-            value.write_sync(sink)?;
-        } else {
-            false.write_sync(sink)?;
-        }
-        Ok(())
     }
 }
 
@@ -780,7 +566,7 @@ where B::Owned: Protocol + Send + Sync {
     }
 }
 
-macro_rules! impl_protocol_nonzero {
+macro_rules! impl_protocol_nonzero { //TODO add #[async_proto(map_err = ...)], then replace this with derives
     ($ty:ty, $primitive:ty) => {
         /// A nonzero integer is represented like its value.
         impl Protocol for $ty {
@@ -824,38 +610,99 @@ impl_protocol_nonzero!(std::num::NonZeroI64, i64);
 impl_protocol_nonzero!(std::num::NonZeroU128, u128);
 impl_protocol_nonzero!(std::num::NonZeroI128, i128);
 
-/// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
-impl Protocol for std::time::Duration {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(Self::new(u64::read(stream).await?, u32::read(stream).await?))
-        })
-    }
+#[derive(Protocol)]
+#[async_proto(internal)]
+struct F32Proxy([u8; 4]);
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            self.as_secs().write(sink).await?;
-            self.subsec_nanos().write(sink).await?;
-            Ok(())
-        })
+impl From<F32Proxy> for f32 {
+    fn from(F32Proxy(bytes): F32Proxy) -> Self {
+        Self::from_be_bytes(bytes)
     }
+}
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(Self::new(u64::read_sync(stream)?, u32::read_sync(stream)?))
+impl<'a> From<&'a f32> for F32Proxy {
+    fn from(val: &f32) -> Self {
+        Self(val.to_be_bytes())
     }
+}
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        self.as_secs().write_sync(sink)?;
-        self.subsec_nanos().write_sync(sink)?;
-        Ok(())
+#[derive(Protocol)]
+#[async_proto(internal)]
+struct F64Proxy([u8; 8]);
+
+impl From<F64Proxy> for f64 {
+    fn from(F64Proxy(bytes): F64Proxy) -> Self {
+        Self::from_be_bytes(bytes)
+    }
+}
+
+impl<'a> From<&'a f64> for F64Proxy {
+    fn from(val: &f64) -> Self {
+        Self(val.to_be_bytes())
+    }
+}
+
+#[derive(Protocol)]
+#[async_proto(internal)]
+struct DurationProxy {
+    secs: u64,
+    subsec_nanos: u32,
+}
+
+impl From<DurationProxy> for std::time::Duration {
+    fn from(DurationProxy { secs, subsec_nanos }: DurationProxy) -> Self {
+        Self::new(secs, subsec_nanos)
+    }
+}
+
+impl<'a> From<&'a std::time::Duration> for DurationProxy {
+    fn from(duration: &std::time::Duration) -> Self {
+        Self {
+            secs: duration.as_secs(),
+            subsec_nanos: duration.subsec_nanos(),
+        }
     }
 }
 
 impl_protocol_for! {
+    /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
+    #[async_proto(via = F32Proxy)]
+    type f32;
+
+    /// Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format.
+    #[async_proto(via = F64Proxy)]
+    type f64;
+
+    struct Range<Idx> {
+        start: Idx,
+        end: Idx,
+    }
+
+    struct RangeFrom<Idx> {
+        start: Idx,
+    }
+
+    struct RangeTo<Idx> {
+        end: Idx,
+    }
+
+    struct RangeToInclusive<Idx> {
+        end: Idx,
+    }
+
+    enum Option<T> {
+        None,
+        Some(T),
+    }
+
     enum std::convert::Infallible {}
+
+    #[async_proto(where(T: Sync))]
+    struct std::marker::PhantomData<T>;
+
     struct std::ops::RangeFull;
+
+    /// A duration is represented as the number of whole seconds as a [`u64`] followed by the number of subsecond nanoseconds as a [`u32`].
+    #[async_proto(via = DurationProxy)]
+    type std::time::Duration;
 }

@@ -1,7 +1,7 @@
 use {
     std::{
-        convert::{
-            TryFrom as _,
+        convert::{ //TODO upgrade to Rust 2021?
+            TryFrom,
             TryInto as _,
         },
         future::Future,
@@ -67,59 +67,34 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
-impl Protocol for serde_json::Number {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-        Box::pin(async move {
-            Ok(match u8::read(stream).await? {
-                0 => Self::from(u64::read(stream).await?),
-                1 => Self::from(i64::read(stream).await?),
-                2 => Self::from_f64(f64::read(stream).await?).ok_or(ReadError::FloatNotFinite)?,
-                n => return Err(ReadError::UnknownVariant8(n)),
-            })
-        })
-    }
+#[derive(Protocol)]
+#[async_proto(internal)]
+enum NumberProxy {
+    U64(u64),
+    I64(i64),
+    F64(f64),
+}
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-        Box::pin(async move {
-            if let Some(value) = self.as_u64() {
-                0u8.write(sink).await?;
-                value.write(sink).await
-            } else if let Some(value) = self.as_i64() {
-                1u8.write(sink).await?;
-                value.write(sink).await
-            } else if let Some(value) = self.as_f64() {
-                2u8.write(sink).await?;
-                value.write(sink).await
-            } else {
-                unreachable!("serde_json::Number is neither u64 nor i64 nor f64")
-            }
-        })
-    }
+impl TryFrom<NumberProxy> for serde_json::Number {
+    type Error = ReadError;
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(match u8::read_sync(stream)? {
-            0 => Self::from(u64::read_sync(stream)?),
-            1 => Self::from(i64::read_sync(stream)?),
-            2 => Self::from_f64(f64::read_sync(stream)?).ok_or(ReadError::FloatNotFinite)?,
-            n => return Err(ReadError::UnknownVariant8(n)),
-        })
+    fn try_from(number: NumberProxy) -> Result<Self, ReadError> {
+        match number {
+            NumberProxy::U64(n) => Ok(Self::from(n)),
+            NumberProxy::I64(n) => Ok(Self::from(n)),
+            NumberProxy::F64(n) => Self::from_f64(n).ok_or(ReadError::FloatNotFinite),
+        }
     }
+}
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        if let Some(value) = self.as_u64() {
-            0u8.write_sync(sink)?;
-            value.write_sync(sink)
-        } else if let Some(value) = self.as_i64() {
-            1u8.write_sync(sink)?;
-            value.write_sync(sink)
-        } else if let Some(value) = self.as_f64() {
-            2u8.write_sync(sink)?;
-            value.write_sync(sink)
+impl<'a> From<&'a serde_json::Number> for NumberProxy {
+    fn from(number: &serde_json::Number) -> Self {
+        if let Some(value) = number.as_u64() {
+            Self::U64(value)
+        } else if let Some(value) = number.as_i64() {
+            Self::I64(value)
+        } else if let Some(value) = number.as_f64() {
+            Self::F64(value)
         } else {
             unreachable!("serde_json::Number is neither u64 nor i64 nor f64")
         }
@@ -136,4 +111,8 @@ impl_protocol_for! {
         Array(Vec<serde_json::Value>),
         Object(serde_json::Map<String, serde_json::Value>),
     }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+    #[async_proto(via = NumberProxy)]
+    type serde_json::Number;
 }

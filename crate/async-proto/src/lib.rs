@@ -28,6 +28,7 @@
 
 use {
     std::{
+        convert::Infallible,
         fmt,
         future::Future,
         io,
@@ -98,6 +99,12 @@ pub enum ReadError {
     Warp(Arc<dep_warp::Error>),
 }
 
+impl From<Infallible> for ReadError {
+    fn from(never: Infallible) -> Self {
+        match never {}
+    }
+}
+
 impl From<io::Error> for ReadError {
     fn from(e: io::Error) -> ReadError {
         ReadError::Io(Arc::new(e))
@@ -161,6 +168,12 @@ pub enum WriteError {
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     Warp(Arc<dep_warp::Error>),
+}
+
+impl From<Infallible> for WriteError {
+    fn from(never: Infallible) -> Self {
+        match never {}
+    }
 }
 
 impl From<io::Error> for WriteError {
