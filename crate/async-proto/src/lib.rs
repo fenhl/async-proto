@@ -341,9 +341,13 @@ pub trait Protocol: Sized {
     /// The default implementation of this method is cancellation safe if and only if the `read-sync` feature is enabled.
     fn read_warp<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
-            #[cfg(feature = "read-sync")] { Self::read_sync(&mut packet.as_bytes()) }
-            #[cfg(not(feature = "read-sync"))] { Self::read(&mut packet.as_bytes()).await }
+            loop {
+                let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
+                if packet.is_ping() || packet.is_pong() { continue }
+                if packet.is_close() { return Err(ReadError::EndOfStream) }
+                #[cfg(feature = "read-sync")] { break Self::read_sync(&mut packet.as_bytes()) }
+                #[cfg(not(feature = "read-sync"))] { break Self::read(&mut packet.as_bytes()).await }
+            }
         })
     }
 
