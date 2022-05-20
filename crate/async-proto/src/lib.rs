@@ -20,9 +20,6 @@
 //!
 //! Additionally, the following features can be enabled via Cargo:
 //!
-//! * `read-sync`: Adds a blocking `read_sync` method to the [`Protocol`] trait.
-//! * `write-sync`: Adds a blocking `write_sync` method to the [`Protocol`] trait.
-//! * `blocking`: Shorthand for enabling both `read-sync` and `write-sync`.
 //! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
 //! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
 
@@ -31,7 +28,10 @@ use {
         convert::Infallible,
         fmt,
         future::Future,
-        io,
+        io::{
+            self,
+            prelude::*,
+        },
         num::TryFromIntError,
         pin::Pin,
         string::FromUtf8Error,
@@ -43,7 +43,6 @@ use {
         AsyncWrite,
     },
 };
-#[cfg(any(feature = "read-sync", feature = "write-sync"))] use std::io::prelude::*;
 #[cfg(any(feature = "tokio-tungstenite", feature = "warp"))] use futures::{
     Sink,
     SinkExt as _,
@@ -63,8 +62,7 @@ pub use async_proto_derive::{
 
 mod impls;
 
-#[cfg_attr(not(feature = "read-sync"), doc = "The error returned from the [`read`](Protocol::read) method.")]
-#[cfg_attr(feature = "read-sync", doc = "The error returned from the [`read`](Protocol::read) and [`read_sync`](Protocol::read_sync) methods.")]
+/// The error returned from the [`read`](Protocol::read) and [`read_sync`](Protocol::read_sync) methods.
 #[derive(Debug, From, Clone)]
 #[allow(missing_docs)]
 pub enum ReadError {
@@ -152,8 +150,7 @@ impl fmt::Display for ReadError {
 
 impl std::error::Error for ReadError {} //TODO use thiserror for better sources?
 
-#[cfg_attr(not(feature = "write-sync"), doc = "The error returned from the [`write`](Protocol::write) method.")]
-#[cfg_attr(feature = "write-sync", doc = "The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.")]
+/// The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.
 #[derive(Debug, From, Clone)]
 #[allow(missing_docs)]
 pub enum WriteError {
@@ -228,17 +225,11 @@ pub trait Protocol: Sized {
     ///
     /// Implementations of this method are generally not cancellation safe.
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>;
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     /// Reads a value of this type from a sync stream.
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError>;
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     /// Writes a value of this type to a sync sink.
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError>;
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     /// Attempts to read a value of this type from a prefix in a buffer and a suffix in a sync stream.
     ///
     /// If [`io::ErrorKind::WouldBlock`] is encountered, `Ok(None)` is returned and the portion read successfully is appended to `buf`. Otherwise, the prefix representing the returned value is removed from `buf`.
@@ -306,12 +297,11 @@ pub trait Protocol: Sized {
     ///
     /// # Cancellation safety
     ///
-    /// The default implementation of this method is cancellation safe if and only if the `read-sync` feature is enabled.
+    /// The default implementation of this method is cancellation safe.
     fn read_ws<'a, R: Stream<Item = Result<dep_tokio_tungstenite::tungstenite::Message, dep_tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
-            #[cfg(feature = "read-sync")] { Self::read_sync(&mut &*packet.into_data()) }
-            #[cfg(not(feature = "read-sync"))] { Self::read(&mut &*packet.into_data()).await }
+            Self::read_sync(&mut &*packet.into_data())
         })
     }
 
@@ -338,15 +328,14 @@ pub trait Protocol: Sized {
     ///
     /// # Cancellation safety
     ///
-    /// The default implementation of this method is cancellation safe if and only if the `read-sync` feature is enabled.
+    /// The default implementation of this method is cancellation safe.
     fn read_warp<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             loop {
                 let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
                 if packet.is_ping() || packet.is_pong() { continue }
                 if packet.is_close() { return Err(ReadError::EndOfStream) }
-                #[cfg(feature = "read-sync")] { break Self::read_sync(&mut packet.as_bytes()) }
-                #[cfg(not(feature = "read-sync"))] { break Self::read(&mut packet.as_bytes()).await }
+                break Self::read_sync(&mut packet.as_bytes())
             }
         })
     }

@@ -314,20 +314,6 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
             None => return quote!(compile_error!("missing type layout specification or #[async_proto(via = ...)]");).into(),
         }
     };
-    let read_sync = if cfg!(feature = "read-sync") {
-        quote! {
-            fn read_sync(mut stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, #async_proto_crate::ReadError> { #impl_read_sync }
-        }
-    } else {
-        quote!()
-    };
-    let write_sync = if cfg!(feature = "write-sync") {
-        quote! {
-            fn write_sync(&self, mut sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), #async_proto_crate::WriteError> { #impl_write_sync }
-        }
-    } else {
-        quote!()
-    };
     let (impl_generics, ty_generics, where_clause) = impl_generics.split_for_impl();
     quote! {
         #(#[#impl_attrs])*
@@ -340,8 +326,8 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                 ::std::boxed::Box::pin(async move { #impl_write })
             }
 
-            #read_sync
-            #write_sync
+            fn read_sync(mut stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, #async_proto_crate::ReadError> { #impl_read_sync }
+            fn write_sync(&self, mut sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), #async_proto_crate::WriteError> { #impl_write_sync }
         }
     }
 }
@@ -471,24 +457,6 @@ impl Parse for Bitflags {
 #[proc_macro]
 pub fn bitflags(input: TokenStream) -> TokenStream {
     let Bitflags { name, repr } = parse_macro_input!(input);
-    let read_sync = if cfg!(feature = "read-sync") {
-        quote! {
-            fn read_sync(stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, ::async_proto::ReadError> {
-                Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read_sync(stream)?))
-            }
-        }
-    } else {
-        quote!()
-    };
-    let write_sync = if cfg!(feature = "write-sync") {
-        quote! {
-            fn write_sync(&self, sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), ::async_proto::WriteError> {
-                <#repr as ::async_proto::Protocol>::write_sync(&self.bits(), sink)
-            }
-        }
-    } else {
-        quote!()
-    };
     TokenStream::from(quote! {
         impl ::async_proto::Protocol for #name {
             fn read<'a, R: ::async_proto::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: &'a mut R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<Self, ::async_proto::ReadError>> + ::core::marker::Send + 'a>> {
@@ -503,8 +471,13 @@ pub fn bitflags(input: TokenStream) -> TokenStream {
                 })
             }
 
-            #read_sync
-            #write_sync
+            fn read_sync(stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, ::async_proto::ReadError> {
+                Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read_sync(stream)?))
+            }
+
+            fn write_sync(&self, sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), ::async_proto::WriteError> {
+                <#repr as ::async_proto::Protocol>::write_sync(&self.bits(), sink)
+            }
         }
     })
 }

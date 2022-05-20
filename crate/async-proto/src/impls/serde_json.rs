@@ -1,10 +1,7 @@
 use {
     std::{
-        convert::{ //TODO upgrade to Rust 2021?
-            TryFrom,
-            TryInto as _,
-        },
         future::Future,
+        io::prelude::*,
         pin::Pin,
     },
     tokio::io::{
@@ -18,7 +15,6 @@ use {
         WriteError,
     },
 };
-#[cfg(any(feature = "read-sync", feature = "write-sync"))] use std::io::prelude::*;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 impl Protocol for serde_json::Map<String, serde_json::Value> {
@@ -44,8 +40,6 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut map = Self::with_capacity(len.try_into()?);
@@ -55,8 +49,6 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
         Ok(map)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for (k, v) in self {

@@ -16,6 +16,7 @@ use {
         },
         future::Future,
         hash::Hash,
+        io::prelude::*,
         ops::{
             Range,
             RangeFrom,
@@ -24,6 +25,11 @@ use {
             RangeToInclusive,
         },
         pin::Pin,
+    },
+    byteorder::{
+        NetworkEndian,
+        ReadBytesExt as _,
+        WriteBytesExt as _,
     },
     tokio::io::{
         AsyncRead,
@@ -38,12 +44,6 @@ use {
         WriteError,
     },
 };
-#[cfg(any(feature = "read-sync", feature = "write-sync"))] use {
-    std::io::prelude::*,
-    byteorder::NetworkEndian,
-};
-#[cfg(feature = "read-sync")] use byteorder::ReadBytesExt as _;
-#[cfg(feature = "write-sync")] use byteorder::WriteBytesExt as _;
 
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
@@ -66,14 +66,10 @@ macro_rules! impl_protocol_primitive {
                 })
             }
 
-            #[cfg(feature = "read-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
                 Ok(stream.$read$(::<$endian>)?()?)
             }
 
-            #[cfg(feature = "write-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 Ok(sink.$write$(::<$endian>)?(*self)?)
             }
@@ -107,14 +103,10 @@ impl<Idx: Protocol + Send + Sync> Protocol for RangeInclusive<Idx> { //TODO deri
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(Idx::read_sync(stream)?..=Idx::read_sync(stream)?)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         self.start().write_sync(sink)?;
         self.end().write_sync(sink)?;
@@ -145,16 +137,12 @@ macro_rules! impl_protocol_tuple {
                 })
             }
 
-            #[cfg(feature = "read-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
                 Ok((
                     $($ty::read_sync(stream)?,)*
                 ))
             }
 
-            #[cfg(feature = "write-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             #[allow(non_snake_case)]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 let ($($ty,)*) = self;
@@ -204,8 +192,6 @@ impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let mut vec = Vec::with_capacity(N);
         for _ in 0..N {
@@ -217,8 +203,6 @@ impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
         })
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         for elt in self {
             elt.write_sync(sink)?;
@@ -245,8 +229,6 @@ impl Protocol for bool {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(match u8::read_sync(stream)? {
             0 => false,
@@ -255,8 +237,6 @@ impl Protocol for bool {
         })
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         if *self { 1u8 } else { 0 }.write_sync(sink)
     }
@@ -273,14 +253,10 @@ impl<T: Protocol> Protocol for Box<T> {
         (**self).write(sink)
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(T::read_sync(stream)?.into()) //TODO use try_new once stabilized
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         (**self).write_sync(sink)
     }
@@ -309,8 +285,6 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut buf = Self::with_capacity(len.try_into()?);
@@ -320,8 +294,6 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
         Ok(buf)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for elt in self {
@@ -355,8 +327,6 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         usize::try_from(len)?; // error here rather than panicking in the insert loop
@@ -367,8 +337,6 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
         Ok(set)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for elt in self {
@@ -401,8 +369,6 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut set = Self::with_capacity(len.try_into()?);
@@ -412,8 +378,6 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
         Ok(set)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for elt in self {
@@ -440,15 +404,11 @@ impl Protocol for String {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let buf = Vec::read_sync(stream)?;
         Ok(Self::from_utf8(buf)?)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         sink.write(self.as_bytes())?;
@@ -481,8 +441,6 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         usize::try_from(len)?; // error here rather than panicking in the insert loop
@@ -493,8 +451,6 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
         Ok(map)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for (k, v) in self {
@@ -529,8 +485,6 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
         let mut map = Self::with_capacity(len.try_into()?);
@@ -540,8 +494,6 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
         Ok(map)
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         u64::try_from(self.len())?.write_sync(sink)?;
         for (k, v) in self {
@@ -573,14 +525,10 @@ where B::Owned: Protocol + Send + Sync {
         })
     }
 
-    #[cfg(feature = "read-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         Ok(Self::Owned(B::Owned::read_sync(stream)?))
     }
 
-    #[cfg(feature = "write-sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
         match self {
             Self::Borrowed(borrowed) => (*borrowed).to_owned().write_sync(sink)?,
@@ -607,14 +555,10 @@ macro_rules! impl_protocol_nonzero { //TODO add #[async_proto(map_err = ...)], t
                 })
             }
 
-            #[cfg(feature = "read-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "read-sync")))]
             fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
                 Ok(Self::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant8(0))?)
             }
 
-            #[cfg(feature = "write-sync")]
-            #[cfg_attr(docsrs, doc(cfg(feature = "write-sync")))]
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
                 self.get().write_sync(sink)?;
                 Ok(())

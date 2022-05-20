@@ -1,6 +1,6 @@
 [package]
 name = "async-proto"
-version = "0.13.1"
+version = "0.14.0"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2021"
 description = "Simple async binary network protocols"
@@ -13,19 +13,15 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-blocking = ["read-sync", "write-sync"]
-read-sync = ["async-proto-derive/read-sync", "byteorder"]
 tokio-tungstenite = ["dep_tokio_tungstenite", "futures"]
 warp = ["dep_warp", "futures"]
-write-sync = ["async-proto-derive/write-sync", "byteorder"]
+
+[dependencies]
+byteorder = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.13.1"
-
-[dependencies.byteorder]
-version = "1"
-optional = true
+version = "=0.14.0"
 
 [dependencies.chrono]
 version = "0.4"

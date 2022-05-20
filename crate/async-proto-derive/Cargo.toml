@@ -1,6 +1,6 @@
 [package]
 name = "async-proto-derive"
-version = "0.13.1"
+version = "0.14.0"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2021"
 description = "Proc-macros for the async-proto crate"
@@ -10,10 +10,6 @@ repository = "https://github.com/fenhl/async-proto"
 
 [package.metadata.docs.rs]
 all-features = true
-
-[features]
-read-sync = []
-write-sync = []
 
 [lib]
 proc-macro = true
