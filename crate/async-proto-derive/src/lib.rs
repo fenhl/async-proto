@@ -80,7 +80,7 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
                 .map(|(idx, _)| Ident::new(&format!("__field{}", idx), Span::call_site()))
                 .collect_vec();
             let write_fields = field_idents.iter()
-                .map(|ident| quote!(#ident#write;));
+                .map(|ident| quote!(#ident #write;));
             quote!(#(#write_fields)*)
         }
         Fields::Named(FieldsNamed { named, .. }) => {
@@ -88,7 +88,7 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
                 .map(|Field { ident, .. }| ident)
                 .collect_vec();
             let write_fields = field_idents.iter()
-                .map(|ident| quote!(#ident#write;));
+                .map(|ident| quote!(#ident #write;));
             quote!(#(#write_fields)*)
         }
     }
