@@ -395,7 +395,9 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
 impl Protocol for String {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let buf = Vec::read(stream).await?;
+            let len = u64::read(stream).await?;
+            let mut buf = vec![0; len.try_into()?];
+            stream.read_exact(&mut buf).await?;
             Ok(Self::from_utf8(buf)?)
         })
     }
@@ -409,7 +411,9 @@ impl Protocol for String {
     }
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let buf = Vec::read_sync(stream)?;
+        let len = u64::read_sync(stream)?;
+        let mut buf = vec![0; len.try_into()?];
+        stream.read_exact(&mut buf)?;
         Ok(Self::from_utf8(buf)?)
     }
 
