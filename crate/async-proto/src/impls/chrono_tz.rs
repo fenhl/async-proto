@@ -1,5 +1,4 @@
 use {
-    std::convert::TryFrom, //TODO upgrade to Rust 2021?
     async_proto_derive::impl_protocol_for,
     crate::{
         Protocol,
