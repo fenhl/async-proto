@@ -45,6 +45,7 @@ use {
     },
 };
 
+#[cfg(feature = "bytes")] mod bytes;
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
 #[cfg(feature = "noisy_float")] mod noisy_float;
@@ -263,6 +264,9 @@ impl<T: Protocol> Protocol for Box<T> {
 }
 
 /// A vector is prefixed with the length as a [`u64`].
+///
+/// Note that due to Rust's lack of [specialization](https://github.com/rust-lang/rust/issues/31844), this implementation is inefficient for `Vec<u8>`.
+/// Prefer [`Bytes`](https://docs.rs/bytes/latest/bytes/struct.Bytes.html) if possible.
 impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
