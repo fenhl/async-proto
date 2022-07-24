@@ -26,8 +26,8 @@
 
 use {
     std::{
+        borrow::Cow,
         convert::Infallible,
-        fmt,
         future::Future,
         io::{
             self,
@@ -38,7 +38,6 @@ use {
         string::FromUtf8Error,
         sync::Arc,
     },
-    derive_more::From,
     tokio::io::{
         AsyncRead,
         AsyncWrite,
@@ -56,46 +55,46 @@ pub use async_proto_derive::{
     Protocol,
     bitflags,
 };
-#[doc(hidden)] pub use { // used in proc macro
-    derive_more,
-    tokio,
-};
+#[doc(hidden)] pub use tokio; // used in proc macro
 
 mod impls;
 
 /// The error returned from the [`read`](Protocol::read) and [`read_sync`](Protocol::read_sync) methods.
-#[derive(Debug, From, Clone)]
+#[derive(Debug, thiserror::Error, Clone)]
 #[allow(missing_docs)]
 pub enum ReadError {
     /// Received a buffer with more than [`usize::MAX`] elements
-    BufSize(TryFromIntError),
+    #[error("received a buffer with more than usize::MAX elements: {0}")]
+    BufSize(#[from] TryFromIntError),
     /// An error variant you can use when manually implementing [`Protocol`]
+    #[error("{0}")]
     Custom(String),
     /// The end of the stream was encountered before a complete value was read.
     ///
     /// Note that this error condition may also be represented as a [`ReadError::Io`] with [`kind`](io::Error::kind) [`UnexpectedEof`](io::ErrorKind::UnexpectedEof).
+    #[error("reached end of stream")]
     EndOfStream,
-    #[cfg(feature = "serde_json")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+    #[error("received an infinite or NaN number")]
     FloatNotFinite,
-    Io(Arc<io::Error>),
     /// Attempted to read an empty type
+    #[error("attempted to read an empty type")]
     ReadNever,
+    #[error("unknown enum variant: {0}")]
+    UnknownVariant8(u8),
+    #[error("unknown enum variant: {0}")]
+    UnknownVariant16(u16),
+    #[error("unknown enum variant: {0}")]
+    UnknownVariant32(u32),
+    #[error("unknown enum variant: {0}")]
+    UnknownVariant64(u64),
+    #[error(transparent)] Io(#[from] Arc<io::Error>),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    Tungstenite(Arc<dep_tokio_tungstenite::tungstenite::Error>),
-    #[from(ignore)]
-    UnknownVariant8(u8),
-    #[from(ignore)]
-    UnknownVariant16(u16),
-    #[from(ignore)]
-    UnknownVariant32(u32),
-    #[from(ignore)]
-    UnknownVariant64(u64),
-    Utf8(FromUtf8Error),
+    #[error(transparent)] Tungstenite(#[from] Arc<dep_tokio_tungstenite::tungstenite::Error>),
+    #[error(transparent)] Utf8(#[from] FromUtf8Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    Warp(Arc<dep_warp::Error>),
+    #[error(transparent)] Warp(#[from] Arc<dep_warp::Error>),
 }
 
 impl From<Infallible> for ReadError {
@@ -104,68 +103,63 @@ impl From<Infallible> for ReadError {
     }
 }
 
+impl From<String> for ReadError {
+    fn from(s: String) -> Self {
+        Self::Custom(s)
+    }
+}
+
+impl<'a> From<&'a str> for ReadError {
+    fn from(s: &str) -> Self {
+        Self::Custom(s.to_owned())
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for ReadError {
+    fn from(s: Cow<'a, str>) -> Self {
+        Self::Custom(s.into_owned())
+    }
+}
+
 impl From<io::Error> for ReadError {
-    fn from(e: io::Error) -> ReadError {
-        ReadError::Io(Arc::new(e))
+    fn from(e: io::Error) -> Self {
+        Self::Io(Arc::new(e))
     }
 }
 
 #[cfg(feature = "tokio-tungstenite")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
 impl From<dep_tokio_tungstenite::tungstenite::Error> for ReadError {
-    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> ReadError {
-        ReadError::Tungstenite(Arc::new(e))
+    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> Self {
+        Self::Tungstenite(Arc::new(e))
     }
 }
 
 #[cfg(feature = "warp")]
 #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
 impl From<dep_warp::Error> for ReadError {
-    fn from(e: dep_warp::Error) -> ReadError {
-        ReadError::Warp(Arc::new(e))
+    fn from(e: dep_warp::Error) -> Self {
+        Self::Warp(Arc::new(e))
     }
 }
-
-impl fmt::Display for ReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ReadError::BufSize(e) => write!(f, "received a buffer with more than usize::MAX elements: {}", e),
-            ReadError::Custom(msg) => msg.fmt(f),
-            ReadError::EndOfStream => write!(f, "reached end of stream"),
-            #[cfg(feature = "serde_json")]
-            ReadError::FloatNotFinite => write!(f, "received an infinite or NaN JSON number"),
-            ReadError::Io(e) => write!(f, "I/O error: {}", e),
-            ReadError::ReadNever => write!(f, "attempted to read an empty type"),
-            #[cfg(feature = "tokio-tungstenite")]
-            ReadError::Tungstenite(e) => write!(f, "tungstenite error: {}", e),
-            ReadError::UnknownVariant8(n) => write!(f, "unknown enum variant: {}", n),
-            ReadError::UnknownVariant16(n) => write!(f, "unknown enum variant: {}", n),
-            ReadError::UnknownVariant32(n) => write!(f, "unknown enum variant: {}", n),
-            ReadError::UnknownVariant64(n) => write!(f, "unknown enum variant: {}", n),
-            ReadError::Utf8(e) => e.fmt(f),
-            #[cfg(feature = "warp")]
-            ReadError::Warp(e) => write!(f, "warp error: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for ReadError {} //TODO use thiserror for better sources?
 
 /// The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.
-#[derive(Debug, From, Clone)]
+#[derive(Debug, thiserror::Error, Clone)]
 #[allow(missing_docs)]
 pub enum WriteError {
     /// Tried to send a buffer with more than [`u64::MAX`] elements
-    BufSize(TryFromIntError),
+    #[error("tried to send a buffer with more than u64::MAX elements: {0}")]
+    BufSize(#[from] TryFromIntError),
     /// An error variant you can use when manually implementing [`Protocol`]
+    #[error("{0}")]
     Custom(String),
-    Io(Arc<io::Error>),
+    #[error(transparent)] Io(#[from] Arc<io::Error>),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    Tungstenite(Arc<dep_tokio_tungstenite::tungstenite::Error>),
+    #[error(transparent)] Tungstenite(#[from] Arc<dep_tokio_tungstenite::tungstenite::Error>),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    Warp(Arc<dep_warp::Error>),
+    #[error(transparent)] Warp(#[from] Arc<dep_warp::Error>),
 }
 
 impl From<Infallible> for WriteError {
@@ -174,43 +168,45 @@ impl From<Infallible> for WriteError {
     }
 }
 
+impl From<String> for WriteError {
+    fn from(s: String) -> Self {
+        Self::Custom(s)
+    }
+}
+
+impl<'a> From<&'a str> for WriteError {
+    fn from(s: &str) -> Self {
+        Self::Custom(s.to_owned())
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for WriteError {
+    fn from(s: Cow<'a, str>) -> Self {
+        Self::Custom(s.into_owned())
+    }
+}
+
 impl From<io::Error> for WriteError {
-    fn from(e: io::Error) -> WriteError {
-        WriteError::Io(Arc::new(e))
+    fn from(e: io::Error) -> Self {
+        Self::Io(Arc::new(e))
     }
 }
 
 #[cfg(feature = "tokio-tungstenite")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
 impl From<dep_tokio_tungstenite::tungstenite::Error> for WriteError {
-    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> WriteError {
-        WriteError::Tungstenite(Arc::new(e))
+    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> Self {
+        Self::Tungstenite(Arc::new(e))
     }
 }
 
 #[cfg(feature = "warp")]
 #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
 impl From<dep_warp::Error> for WriteError {
-    fn from(e: dep_warp::Error) -> WriteError {
-        WriteError::Warp(Arc::new(e))
+    fn from(e: dep_warp::Error) -> Self {
+        Self::Warp(Arc::new(e))
     }
 }
-
-impl fmt::Display for WriteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            WriteError::BufSize(e) => write!(f, "tried to send a buffer with more than u64::MAX elements: {}", e),
-            WriteError::Custom(msg) => msg.fmt(f),
-            WriteError::Io(e) => write!(f, "I/O error: {}", e),
-            #[cfg(feature = "tokio-tungstenite")]
-            WriteError::Tungstenite(e) => write!(f, "tungstenite error: {}", e),
-            #[cfg(feature = "warp")]
-            WriteError::Warp(e) => write!(f, "warp error: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for WriteError {} //TODO use thiserror for better sources?
 
 /// This trait allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
 pub trait Protocol: Sized {
