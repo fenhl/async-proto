@@ -546,46 +546,6 @@ where B::Owned: Protocol + Send + Sync {
     }
 }
 
-macro_rules! impl_protocol_nonzero { //TODO add #[async_proto(map_err = ...)], then replace this with derives
-    ($ty:ty, $primitive:ty) => {
-        /// A nonzero integer is represented like its value.
-        impl Protocol for $ty {
-            fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
-                Box::pin(async move {
-                    Ok(Self::new(<$primitive>::read(stream).await?).ok_or(ReadError::UnknownVariant8(0))?)
-                })
-            }
-
-            fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
-                Box::pin(async move {
-                    self.get().write(sink).await?;
-                    Ok(())
-                })
-            }
-
-            fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-                Ok(Self::new(<$primitive>::read_sync(stream)?).ok_or(ReadError::UnknownVariant8(0))?)
-            }
-
-            fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-                self.get().write_sync(sink)?;
-                Ok(())
-            }
-        }
-    };
-}
-
-impl_protocol_nonzero!(std::num::NonZeroU8, u8);
-impl_protocol_nonzero!(std::num::NonZeroI8, i8);
-impl_protocol_nonzero!(std::num::NonZeroU16, u16);
-impl_protocol_nonzero!(std::num::NonZeroI16, i16);
-impl_protocol_nonzero!(std::num::NonZeroU32, u32);
-impl_protocol_nonzero!(std::num::NonZeroI32, i32);
-impl_protocol_nonzero!(std::num::NonZeroU64, u64);
-impl_protocol_nonzero!(std::num::NonZeroI64, i64);
-impl_protocol_nonzero!(std::num::NonZeroU128, u128);
-impl_protocol_nonzero!(std::num::NonZeroI128, i128);
-
 #[derive(Protocol)]
 #[async_proto(internal)]
 struct F32Proxy([u8; 4]);
@@ -641,6 +601,46 @@ impl<'a> From<&'a std::time::Duration> for DurationProxy {
 }
 
 impl_protocol_for! {
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = u8, clone, map_err = |_| ReadError::UnknownVariant8(0))]
+    type std::num::NonZeroU8;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = i8, clone, map_err = |_| ReadError::UnknownVariant8(0))]
+    type std::num::NonZeroI8;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = u16, clone, map_err = |_| ReadError::UnknownVariant16(0))]
+    type std::num::NonZeroU16;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = i16, clone, map_err = |_| ReadError::UnknownVariant16(0))]
+    type std::num::NonZeroI16;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = u32, clone, map_err = |_| ReadError::UnknownVariant32(0))]
+    type std::num::NonZeroU32;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = i32, clone, map_err = |_| ReadError::UnknownVariant32(0))]
+    type std::num::NonZeroI32;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = u64, clone, map_err = |_| ReadError::UnknownVariant64(0))]
+    type std::num::NonZeroU64;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = i64, clone, map_err = |_| ReadError::UnknownVariant64(0))]
+    type std::num::NonZeroI64;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = u128, clone, map_err = |_| ReadError::UnknownVariant128(0))]
+    type std::num::NonZeroU128;
+
+    #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
+    #[async_proto(via = i128, clone, map_err = |_| ReadError::UnknownVariant128(0))]
+    type std::num::NonZeroI128;
+
     #[async_proto(attr(doc = "Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format."))]
     #[async_proto(via = F32Proxy)]
     type f32;

@@ -87,6 +87,8 @@ pub enum ReadError {
     UnknownVariant32(u32),
     #[error("unknown enum variant: {0}")]
     UnknownVariant64(u64),
+    #[error("unknown enum variant: {0}")]
+    UnknownVariant128(u128),
     #[error(transparent)] Io(#[from] Arc<io::Error>),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
