@@ -36,7 +36,6 @@ use {
         num::TryFromIntError,
         pin::Pin,
         string::FromUtf8Error,
-        sync::Arc,
     },
     tokio::io::{
         AsyncRead,
@@ -60,7 +59,7 @@ pub use async_proto_derive::{
 mod impls;
 
 /// The error returned from the [`read`](Protocol::read) and [`read_sync`](Protocol::read_sync) methods.
-#[derive(Debug, thiserror::Error, Clone)]
+#[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum ReadError {
     /// Received a buffer with more than [`usize::MAX`] elements
@@ -89,14 +88,14 @@ pub enum ReadError {
     UnknownVariant64(u64),
     #[error("unknown enum variant: {0}")]
     UnknownVariant128(u128),
-    #[error(transparent)] Io(#[from] Arc<io::Error>),
+    #[error(transparent)] Io(#[from] io::Error),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    #[error(transparent)] Tungstenite(#[from] Arc<dep_tokio_tungstenite::tungstenite::Error>),
+    #[error(transparent)] Tungstenite(#[from] dep_tokio_tungstenite::tungstenite::Error),
     #[error(transparent)] Utf8(#[from] FromUtf8Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] Arc<dep_warp::Error>),
+    #[error(transparent)] Warp(#[from] dep_warp::Error),
 }
 
 impl From<Infallible> for ReadError {
@@ -123,30 +122,8 @@ impl<'a> From<Cow<'a, str>> for ReadError {
     }
 }
 
-impl From<io::Error> for ReadError {
-    fn from(e: io::Error) -> Self {
-        Self::Io(Arc::new(e))
-    }
-}
-
-#[cfg(feature = "tokio-tungstenite")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-impl From<dep_tokio_tungstenite::tungstenite::Error> for ReadError {
-    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> Self {
-        Self::Tungstenite(Arc::new(e))
-    }
-}
-
-#[cfg(feature = "warp")]
-#[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-impl From<dep_warp::Error> for ReadError {
-    fn from(e: dep_warp::Error) -> Self {
-        Self::Warp(Arc::new(e))
-    }
-}
-
 /// The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.
-#[derive(Debug, thiserror::Error, Clone)]
+#[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum WriteError {
     /// Tried to send a buffer with more than [`u64::MAX`] elements
@@ -155,13 +132,13 @@ pub enum WriteError {
     /// An error variant you can use when manually implementing [`Protocol`]
     #[error("{0}")]
     Custom(String),
-    #[error(transparent)] Io(#[from] Arc<io::Error>),
+    #[error(transparent)] Io(#[from] io::Error),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    #[error(transparent)] Tungstenite(#[from] Arc<dep_tokio_tungstenite::tungstenite::Error>),
+    #[error(transparent)] Tungstenite(#[from] dep_tokio_tungstenite::tungstenite::Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] Arc<dep_warp::Error>),
+    #[error(transparent)] Warp(#[from] dep_warp::Error),
 }
 
 impl From<Infallible> for WriteError {
@@ -185,28 +162,6 @@ impl<'a> From<&'a str> for WriteError {
 impl<'a> From<Cow<'a, str>> for WriteError {
     fn from(s: Cow<'a, str>) -> Self {
         Self::Custom(s.into_owned())
-    }
-}
-
-impl From<io::Error> for WriteError {
-    fn from(e: io::Error) -> Self {
-        Self::Io(Arc::new(e))
-    }
-}
-
-#[cfg(feature = "tokio-tungstenite")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-impl From<dep_tokio_tungstenite::tungstenite::Error> for WriteError {
-    fn from(e: dep_tokio_tungstenite::tungstenite::Error) -> Self {
-        Self::Tungstenite(Arc::new(e))
-    }
-}
-
-#[cfg(feature = "warp")]
-#[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-impl From<dep_warp::Error> for WriteError {
-    fn from(e: dep_warp::Error) -> Self {
-        Self::Warp(Arc::new(e))
     }
 }
 
