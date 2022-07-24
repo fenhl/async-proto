@@ -1,6 +1,6 @@
 [package]
 name = "async-proto"
-version = "0.14.2"
+version = "0.14.3"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2021"
 description = "Simple async binary network protocols"
@@ -21,7 +21,7 @@ byteorder = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.14.2"
+version = "=0.14.3"
 
 [dependencies.bytes]
 version = "1"

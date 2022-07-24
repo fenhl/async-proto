@@ -19,6 +19,9 @@ use {
 };
 
 /// A [`Bytes`] is prefixed with the length as a [`u64`].
+///
+/// Using [`Bytes`] is recommended for sending large amounts of data, since the [`Protocol`] implementation for `Vec<u8>` reads and writes each byte individually.
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 impl Protocol for Bytes {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
