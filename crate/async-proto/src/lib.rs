@@ -184,6 +184,16 @@ pub trait Protocol: Sized {
     /// Writes a value of this type to a sync sink.
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError>;
 
+    /// Takes ownership of an async stream, reads a value of this type from it, then returns it along with the stream.
+    ///
+    /// This can be used to get around drop glue issues that might arise with `read`.
+    fn read_owned<R: AsyncRead + Unpin + Send + 'static>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<(R, Self), ReadError>> + Send>> {
+        Box::pin(async move {
+            let value = Self::read(&mut stream).await?;
+            Ok((stream, value))
+        })
+    }
+
     /// Attempts to read a value of this type from a prefix in a buffer and a suffix in a sync stream.
     ///
     /// If [`io::ErrorKind::WouldBlock`] is encountered, `Ok(None)` is returned and the portion read successfully is appended to `buf`. Otherwise, the prefix representing the returned value is removed from `buf`.
