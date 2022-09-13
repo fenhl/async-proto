@@ -1,6 +1,6 @@
 [package]
 name = "async-proto"
-version = "0.15.1"
+version = "0.15.2"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2021"
 description = "Simple async binary network protocols"
@@ -22,7 +22,7 @@ thiserror = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.15.1"
+version = "=0.15.2"
 
 [dependencies.bytes]
 version = "1"
@@ -42,6 +42,10 @@ optional = true
 
 [dependencies.noisy_float]
 version = "0.2"
+optional = true
+
+[dependencies.semver]
+version = "1"
 optional = true
 
 [dependencies.serde_json]

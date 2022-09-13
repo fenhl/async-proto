@@ -49,6 +49,7 @@ use {
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
 #[cfg(feature = "noisy_float")] mod noisy_float;
+#[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
 
 macro_rules! impl_protocol_primitive {
