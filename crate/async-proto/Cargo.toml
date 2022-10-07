@@ -41,7 +41,8 @@ version = "0.3"
 optional = true
 
 [dependencies.noisy_float]
-version = "0.2"
+git = "https://github.com/fenhl/noisy_float-rs"
+branch = "checked-ops"
 optional = true
 
 [dependencies.semver]
