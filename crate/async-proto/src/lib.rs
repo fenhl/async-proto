@@ -92,11 +92,11 @@ pub enum ReadError {
     #[error(transparent)] Io(#[from] io::Error),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    #[error(transparent)] Tungstenite(#[from] dep_tokio_tungstenite::tungstenite::Error),
+    #[error(transparent)] Tungstenite(#[from] tokio_tungstenite::tungstenite::Error),
     #[error(transparent)] Utf8(#[from] FromUtf8Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] dep_warp::Error),
+    #[error(transparent)] Warp(#[from] warp::Error),
 }
 
 impl From<Infallible> for ReadError {
@@ -136,10 +136,10 @@ pub enum WriteError {
     #[error(transparent)] Io(#[from] io::Error),
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    #[error(transparent)] Tungstenite(#[from] dep_tokio_tungstenite::tungstenite::Error),
+    #[error(transparent)] Tungstenite(#[from] tokio_tungstenite::tungstenite::Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] dep_warp::Error),
+    #[error(transparent)] Warp(#[from] warp::Error),
 }
 
 impl From<Infallible> for WriteError {
@@ -258,12 +258,12 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    /// Reads a value of this type from a [`tokio-tungstenite`](dep_tokio_tungstenite) websocket.
+    /// Reads a value of this type from a [`tokio-tungstenite`](tokio_tungstenite) websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is cancellation safe.
-    fn read_ws<'a, R: Stream<Item = Result<dep_tokio_tungstenite::tungstenite::Message, dep_tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+    fn read_ws<'a, R: Stream<Item = Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
             Self::read_sync(&mut &*packet.into_data())
@@ -272,29 +272,29 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    /// Writes a value of this type to a [`tokio-tungstenite`](dep_tokio_tungstenite) websocket.
+    /// Writes a value of this type to a [`tokio-tungstenite`](tokio_tungstenite) websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is not cancellation safe.
-    fn write_ws<'a, W: Sink<dep_tokio_tungstenite::tungstenite::Message, Error = dep_tokio_tungstenite::tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
+    fn write_ws<'a, W: Sink<tokio_tungstenite::tungstenite::Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
             self.write(&mut buf).await?;
-            sink.send(dep_tokio_tungstenite::tungstenite::Message::binary(buf)).await?;
+            sink.send(tokio_tungstenite::tungstenite::Message::binary(buf)).await?;
             Ok(())
         })
     }
 
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    /// Reads a value of this type from a [`warp`](dep_warp) websocket.
+    /// Reads a value of this type from a [`warp`] websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is cancellation safe.
-    fn read_warp<'a, R: Stream<Item = Result<dep_warp::filters::ws::Message, dep_warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+    fn read_warp<'a, R: Stream<Item = Result<warp::filters::ws::Message, warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             loop {
                 let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
@@ -307,17 +307,17 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    /// Writes a value of this type to a [`warp`](dep_warp) websocket.
+    /// Writes a value of this type to a [`warp`] websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is not cancellation safe.
-    fn write_warp<'a, W: Sink<dep_warp::filters::ws::Message, Error = dep_warp::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
+    fn write_warp<'a, W: Sink<warp::filters::ws::Message, Error = warp::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
             self.write(&mut buf).await?;
-            sink.send(dep_warp::filters::ws::Message::binary(buf)).await?;
+            sink.send(warp::filters::ws::Message::binary(buf)).await?;
             Ok(())
         })
     }
