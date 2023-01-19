@@ -186,9 +186,9 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
         let map_err = map_err.unwrap_or(parse_quote!(::core::convert::Into::<#async_proto_crate::ReadError>::into));
         (
             quote!(<Self as ::std::str::FromStr>::from_str(&<::std::string::String as #async_proto_crate::Protocol>::read(stream).await?).map_err(#map_err)),
-            quote!(<::std::string::String as #async_proto_crate::Protocol>::write(<Self as ::std::string::ToString>::to_string(self), sink).await),
+            quote!(<::std::string::String as #async_proto_crate::Protocol>::write(&<Self as ::std::string::ToString>::to_string(self), sink).await),
             quote!(<Self as ::std::str::FromStr>::from_str(&<::std::string::String as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(#map_err)),
-            quote!(<::std::string::String as #async_proto_crate::Protocol>::write_sync(<Self as ::std::string::ToString>::to_string(self), sink)),
+            quote!(<::std::string::String as #async_proto_crate::Protocol>::write_sync(&<Self as ::std::string::ToString>::to_string(self), sink)),
         )
     } else if let Some(proxy_ty) = via {
         if internal && data.is_some() { return quote!(compile_error!("redundant type layout specification with #[async_proto(via = ...)]");).into() }
