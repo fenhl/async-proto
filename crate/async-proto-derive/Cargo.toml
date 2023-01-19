@@ -1,6 +1,6 @@
 [package]
 name = "async-proto-derive"
-version = "0.16.0"
+version = "0.16.1"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2021"
 description = "Proc-macros for the async-proto crate"
