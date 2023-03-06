@@ -90,9 +90,9 @@ pub enum ReadError {
     #[error("unknown enum variant: {0}")]
     UnknownVariant128(u128),
     #[error(transparent)] Io(#[from] io::Error),
-    #[cfg(feature = "tokio-tungstenite")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    #[error(transparent)] Tungstenite(#[from] tokio_tungstenite::tungstenite::Error),
+    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
+    #[error(transparent)] Tungstenite(#[from] tungstenite::Error),
     #[error(transparent)] Utf8(#[from] FromUtf8Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
@@ -134,9 +134,9 @@ pub enum WriteError {
     #[error("{0}")]
     Custom(String),
     #[error(transparent)] Io(#[from] io::Error),
-    #[cfg(feature = "tokio-tungstenite")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    #[error(transparent)] Tungstenite(#[from] tokio_tungstenite::tungstenite::Error),
+    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
+    #[error(transparent)] Tungstenite(#[from] tungstenite::Error),
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     #[error(transparent)] Warp(#[from] warp::Error),
@@ -258,12 +258,12 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    /// Reads a value of this type from a [`tokio-tungstenite`](tokio_tungstenite) websocket.
+    /// Reads a value of this type from a `tokio-tungstenite` websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is cancellation safe.
-    fn read_ws<'a, R: Stream<Item = Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+    fn read_ws<'a, R: Stream<Item = Result<tungstenite::Message, tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
             Self::read_sync(&mut &*packet.into_data())
@@ -272,17 +272,17 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "tokio-tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    /// Writes a value of this type to a [`tokio-tungstenite`](tokio_tungstenite) websocket.
+    /// Writes a value of this type to a `tokio-tungstenite` websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is not cancellation safe.
-    fn write_ws<'a, W: Sink<tokio_tungstenite::tungstenite::Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
+    fn write_ws<'a, W: Sink<tungstenite::Message, Error = tungstenite::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
             self.write(&mut buf).await?;
-            sink.send(tokio_tungstenite::tungstenite::Message::binary(buf)).await?;
+            sink.send(tungstenite::Message::binary(buf)).await?;
             Ok(())
         })
     }
@@ -320,5 +320,23 @@ pub trait Protocol: Sized {
             sink.send(warp::filters::ws::Message::binary(buf)).await?;
             Ok(())
         })
+    }
+
+    #[cfg(feature = "tungstenite")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
+    /// Reads a value of this type from a [`tungstenite`](tungstenite) websocket.
+    fn read_ws_sync(websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
+        let packet = websocket.read_message()?;
+        Self::read_sync(&mut &*packet.into_data())
+    }
+
+    #[cfg(feature = "tungstenite")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
+    /// Writes a value of this type to a [`tungstenite`](tungstenite) websocket.
+    fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
+        let mut buf = Vec::default();
+        self.write_sync(&mut buf)?;
+        websocket.write_message(tungstenite::Message::binary(buf))?;
+        Ok(())
     }
 }
