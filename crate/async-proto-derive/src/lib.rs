@@ -110,7 +110,7 @@ impl Parse for AsyncProtoAttr {
             let _ = input.parse::<Token![where]>()?;
             let content;
             parenthesized!(content in input);
-            Self::Where(content.parse_terminated(WherePredicate::parse)?)
+            Self::Where(Punctuated::parse_terminated(&content)?)
         } else {
             let ident = input.parse::<Ident>()?;
             match &*ident.to_string() {
@@ -118,7 +118,7 @@ impl Parse for AsyncProtoAttr {
                 "attr" => {
                     let content;
                     parenthesized!(content in input);
-                    Self::Attr(content.parse_terminated(Meta::parse)?)
+                    Self::Attr(Punctuated::parse_terminated(&content)?)
                 }
                 "clone" => Self::Clone,
                 "internal" => Self::Internal,
@@ -143,7 +143,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
     let mut map_err = None;
     let mut where_predicates = None;
     let mut impl_attrs = Vec::default();
-    for attr in attrs.into_iter().filter(|attr| attr.path.is_ident("async_proto")) {
+    for attr in attrs.into_iter().filter(|attr| attr.path().is_ident("async_proto")) {
         match attr.parse_args_with(Punctuated::<AsyncProtoAttr, Token![,]>::parse_terminated) {
             Ok(attrs) => for attr in attrs {
                 match attr {
@@ -409,7 +409,7 @@ impl Parse for ImplProtocolFor {
                 let generics = input.parse()?;
                 let content;
                 let brace_token = braced!(content in input);
-                let variants = content.parse_terminated(Variant::parse)?;
+                let variants = Punctuated::parse_terminated(&content)?;
                 (attrs, path, generics, Some(Data::Enum(DataEnum { enum_token, brace_token, variants })))
             } else if lookahead.peek(Token![struct]) {
                 let struct_token = input.parse()?;
@@ -421,12 +421,12 @@ impl Parse for ImplProtocolFor {
                 } else if lookahead.peek(Paren) {
                     let content;
                     let paren_token = parenthesized!(content in input);
-                    let unnamed = content.parse_terminated(Field::parse_unnamed)?;
+                    let unnamed = Punctuated::parse_terminated_with(&content, Field::parse_unnamed)?;
                     Fields::Unnamed(FieldsUnnamed { paren_token, unnamed })
                 } else if lookahead.peek(Brace) {
                     let content;
                     let brace_token = braced!(content in input);
-                    let named = content.parse_terminated(Field::parse_named)?;
+                    let named = Punctuated::parse_terminated_with(&content, Field::parse_named)?;
                     Fields::Named(FieldsNamed { brace_token, named })
                 } else {
                     return Err(lookahead.error())
