@@ -305,6 +305,18 @@ pub trait Protocol: Sized {
         })
     }
 
+    #[cfg(feature = "tokio-tungstenite")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
+    /// Takes ownership of an async websocket stream, reads a value of this type from it, then returns it along with the stream.
+    ///
+    /// This can be used to get around drop glue issues that might arise with `read_ws`.
+    fn read_ws_owned<R: Stream<Item = Result<tungstenite::Message, tungstenite::Error>> + Unpin + Send + 'static>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<(R, Self), ReadError>> + Send>> {
+        Box::pin(async move {
+            let value = Self::read_ws(&mut stream).await?;
+            Ok((stream, value))
+        })
+    }
+
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     /// Writes a value of this type to a [`warp`] websocket.
