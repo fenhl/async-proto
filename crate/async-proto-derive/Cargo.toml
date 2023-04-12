@@ -1,8 +1,8 @@
 [package]
 name = "async-proto-derive"
-version = "0.16.4"
-authors = ["Fenhl <fenhl@fenhl.net>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 description = "Proc-macros for the async-proto crate"
 license = "MIT"
 readme = "../../README.md"
