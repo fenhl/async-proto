@@ -124,6 +124,27 @@ impl<'a> From<Cow<'a, str>> for ReadError {
     }
 }
 
+impl From<ReadError> for io::Error {
+    fn from(e: ReadError) -> Self {
+        match e {
+            ReadError::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
+            ReadError::Io(e) => e,
+            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadError::Tungstenite(e) => io::Error::new(io::ErrorKind::Other, e),
+            ReadError::Utf8(e) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(feature = "warp")] ReadError::Warp(e) => io::Error::new(io::ErrorKind::Other, e),
+            ReadError::EndOfStream => io::Error::new(io::ErrorKind::UnexpectedEof, e),
+            ReadError::FloatNotFinite |
+            ReadError::UnknownVariant8(_) |
+            ReadError::UnknownVariant16(_) |
+            ReadError::UnknownVariant32(_) |
+            ReadError::UnknownVariant64(_) |
+            ReadError::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            ReadError::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
+            ReadError::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
+        }
+    }
+}
+
 /// The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
@@ -164,6 +185,18 @@ impl<'a> From<&'a str> for WriteError {
 impl<'a> From<Cow<'a, str>> for WriteError {
     fn from(s: Cow<'a, str>) -> Self {
         Self::Custom(s.into_owned())
+    }
+}
+
+impl From<WriteError> for io::Error {
+    fn from(e: WriteError) -> Self {
+        match e {
+            WriteError::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
+            WriteError::Io(e) => e,
+            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] WriteError::Tungstenite(e) => io::Error::new(io::ErrorKind::Other, e),
+            #[cfg(feature = "warp")] WriteError::Warp(e) => io::Error::new(io::ErrorKind::Other, e),
+            WriteError::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
+        }
     }
 }
 
