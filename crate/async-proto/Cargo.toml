@@ -22,7 +22,7 @@ thiserror = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.16.7"
+version = "=0.16.8"
 
 [dependencies.bytes]
 version = "1"
@@ -58,7 +58,7 @@ version = "1"
 features = ["io-util"]
 
 [dependencies.tungstenite]
-version = "0.18"
+version = "0.19"
 optional = true
 
 [dependencies.uuid]
