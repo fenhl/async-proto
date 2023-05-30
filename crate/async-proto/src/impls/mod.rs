@@ -48,6 +48,7 @@ use {
 #[cfg(feature = "bytes")] mod bytes;
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
+#[cfg(feature = "either")] mod either;
 #[cfg(feature = "noisy_float")] mod noisy_float;
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
