@@ -275,7 +275,6 @@ pub trait Protocol: Sized {
             match Self::read_sync(&mut slice) {
                 Ok(value) => {
                     let value_len = slice.len();
-                    drop(slice);
                     buf.drain(..buf.len() - value_len);
                     return Ok(Some(value))
                 }
@@ -373,7 +372,7 @@ pub trait Protocol: Sized {
     #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
     /// Reads a value of this type from a [`tungstenite`](tungstenite) websocket.
     fn read_ws_sync(websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
-        let packet = websocket.read_message()?;
+        let packet = websocket.read()?;
         Self::read_sync(&mut &*packet.into_data())
     }
 
@@ -383,7 +382,8 @@ pub trait Protocol: Sized {
     fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
         let mut buf = Vec::default();
         self.write_sync(&mut buf)?;
-        websocket.write_message(tungstenite::Message::binary(buf))?;
+        websocket.send(tungstenite::Message::binary(buf))?;
+        websocket.flush()?;
         Ok(())
     }
 }
