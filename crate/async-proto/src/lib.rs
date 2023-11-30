@@ -25,6 +25,7 @@
 //! Additionally, the following features can be enabled via Cargo:
 //!
 //! * `tokio-tungstenite`: Adds a dependency on the [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
+//! * `tungstenite`: Adds a dependency on the [`tungstenite`](https://docs.rs/tungstenite) crate and convenience methods for synchronously reading/writing [`Protocol`] types from/to its websockets.
 //! * `warp`: Adds a dependency on the [`warp`](https://docs.rs/warp) crate and convenience methods for reading/writing [`Protocol`] types from/to its websockets.
 
 use {
@@ -370,7 +371,7 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
-    /// Reads a value of this type from a [`tungstenite`](tungstenite) websocket.
+    /// Reads a value of this type from a [`tungstenite`] websocket.
     fn read_ws_sync(websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
         let packet = websocket.read()?;
         Self::read_sync(&mut &*packet.into_data())
@@ -378,7 +379,7 @@ pub trait Protocol: Sized {
 
     #[cfg(feature = "tungstenite")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
-    /// Writes a value of this type to a [`tungstenite`](tungstenite) websocket.
+    /// Writes a value of this type to a [`tungstenite`] websocket.
     fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
         let mut buf = Vec::default();
         self.write_sync(&mut buf)?;
