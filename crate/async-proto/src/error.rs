@@ -173,7 +173,7 @@ pub struct WriteError {
     /// Where it went wrong.
     pub context: ErrorContext,
     /// What went wrong.
-    pub kind: ReadErrorKind,
+    pub kind: WriteErrorKind,
 }
 
 /// Provides additional information about the origin of an error.
