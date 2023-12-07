@@ -7,7 +7,7 @@ use {
     async_proto_derive::impl_protocol_for,
     crate::{
         Protocol,
-        ReadError,
+        ReadErrorKind,
     },
 };
 
@@ -18,10 +18,10 @@ struct NoisyFloatProxy<F: Float> {
 }
 
 impl<F: Float, C: FloatChecker<F>> TryFrom<NoisyFloatProxy<F>> for NoisyFloat<F, C> {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(NoisyFloatProxy { raw }: NoisyFloatProxy<F>) -> Result<Self, ReadError> {
-        Self::try_new(raw).ok_or_else(|| ReadError::Custom(format!("read an invalid noisy float")))
+    fn try_from(NoisyFloatProxy { raw }: NoisyFloatProxy<F>) -> Result<Self, ReadErrorKind> {
+        Self::try_new(raw).ok_or_else(|| ReadErrorKind::Custom(format!("read an invalid noisy float")))
     }
 }
 
@@ -33,7 +33,7 @@ impl<'a, F: Float, C: FloatChecker<F>> From<&'a NoisyFloat<F, C>> for NoisyFloat
 
 impl_protocol_for! {
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "noisy_float")))))]
-    /// A noisy float is represented like its underlying type. Reading an invalid float produces a [`ReadError::Custom`].
+    /// A noisy float is represented like its underlying type. Reading an invalid float produces a [`ReadErrorKind::Custom`].
     #[async_proto(via = NoisyFloatProxy<F>, where(F: Protocol + Float + Send + Sync + 'static, C: FloatChecker<F> + Send + Sync))]
     type NoisyFloat<F: Float, C: FloatChecker<F>>;
 }

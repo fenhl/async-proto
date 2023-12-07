@@ -10,8 +10,10 @@ use {
     },
     async_proto_derive::impl_protocol_for,
     crate::{
+        ErrorContext,
         Protocol,
         ReadError,
+        ReadErrorKind,
         WriteError,
     },
 };
@@ -21,7 +23,10 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut map = Self::with_capacity(len.try_into()?);
+            let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
+                kind: e.into(),
+            })?);
             for _ in 0..len {
                 map.insert(String::read(stream).await?, serde_json::Value::read(stream).await?);
             }
@@ -31,7 +36,10 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
+                kind: e.into(),
+            })?.write(sink).await?;
             for (k, v) in self {
                 k.write(sink).await?;
                 v.write(sink).await?;
@@ -42,7 +50,10 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut map = Self::with_capacity(len.try_into()?);
+        let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
+            kind: e.into(),
+        })?);
         for _ in 0..len {
             map.insert(String::read_sync(stream)?, serde_json::Value::read_sync(stream)?);
         }
@@ -50,7 +61,10 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
         for (k, v) in self {
             k.write_sync(sink)?;
             v.write_sync(sink)?;
@@ -68,13 +82,13 @@ enum NumberProxy {
 }
 
 impl TryFrom<NumberProxy> for serde_json::Number {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(number: NumberProxy) -> Result<Self, ReadError> {
+    fn try_from(number: NumberProxy) -> Result<Self, ReadErrorKind> {
         match number {
             NumberProxy::U64(n) => Ok(Self::from(n)),
             NumberProxy::I64(n) => Ok(Self::from(n)),
-            NumberProxy::F64(n) => Self::from_f64(n).ok_or(ReadError::FloatNotFinite),
+            NumberProxy::F64(n) => Self::from_f64(n).ok_or(ReadErrorKind::FloatNotFinite),
         }
     }
 }

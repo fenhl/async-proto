@@ -30,16 +30,12 @@
 
 use {
     std::{
-        borrow::Cow,
-        convert::Infallible,
         future::Future,
         io::{
             self,
             prelude::*,
         },
-        num::TryFromIntError,
         pin::Pin,
-        string::FromUtf8Error,
     },
     tokio::io::{
         AsyncRead,
@@ -54,153 +50,17 @@ use {
         TryStreamExt as _,
     },
 };
-pub use async_proto_derive::{
-    Protocol,
-    bitflags,
+pub use {
+    async_proto_derive::{
+        Protocol,
+        bitflags,
+    },
+    crate::error::*,
 };
 #[doc(hidden)] pub use tokio; // used in proc macro
 
+mod error;
 mod impls;
-
-/// The error returned from the [`read`](Protocol::read) and [`read_sync`](Protocol::read_sync) methods.
-#[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
-pub enum ReadError {
-    /// Received a buffer with more than [`usize::MAX`] elements
-    #[error("received a buffer with more than usize::MAX elements: {0}")]
-    BufSize(#[from] TryFromIntError),
-    /// An error variant you can use when manually implementing [`Protocol`]
-    #[error("{0}")]
-    Custom(String),
-    /// The end of the stream was encountered before a complete value was read.
-    ///
-    /// Note that this error condition may also be represented as a [`ReadError::Io`] with [`kind`](io::Error::kind) [`UnexpectedEof`](io::ErrorKind::UnexpectedEof).
-    #[error("reached end of stream")]
-    EndOfStream,
-    #[error("received an infinite or NaN number")]
-    FloatNotFinite,
-    /// Attempted to read an empty type
-    #[error("attempted to read an empty type")]
-    ReadNever,
-    #[error("unknown enum variant: {0}")]
-    UnknownVariant8(u8),
-    #[error("unknown enum variant: {0}")]
-    UnknownVariant16(u16),
-    #[error("unknown enum variant: {0}")]
-    UnknownVariant32(u32),
-    #[error("unknown enum variant: {0}")]
-    UnknownVariant64(u64),
-    #[error("unknown enum variant: {0}")]
-    UnknownVariant128(u128),
-    #[error(transparent)] Io(#[from] io::Error),
-    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
-    #[error(transparent)] Tungstenite(#[from] tungstenite::Error),
-    #[error(transparent)] Utf8(#[from] FromUtf8Error),
-    #[cfg(feature = "warp")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] warp::Error),
-}
-
-impl From<Infallible> for ReadError {
-    fn from(never: Infallible) -> Self {
-        match never {}
-    }
-}
-
-impl From<String> for ReadError {
-    fn from(s: String) -> Self {
-        Self::Custom(s)
-    }
-}
-
-impl<'a> From<&'a str> for ReadError {
-    fn from(s: &str) -> Self {
-        Self::Custom(s.to_owned())
-    }
-}
-
-impl<'a> From<Cow<'a, str>> for ReadError {
-    fn from(s: Cow<'a, str>) -> Self {
-        Self::Custom(s.into_owned())
-    }
-}
-
-impl From<ReadError> for io::Error {
-    fn from(e: ReadError) -> Self {
-        match e {
-            ReadError::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            ReadError::Io(e) => e,
-            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadError::Tungstenite(e) => io::Error::new(io::ErrorKind::Other, e),
-            ReadError::Utf8(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            #[cfg(feature = "warp")] ReadError::Warp(e) => io::Error::new(io::ErrorKind::Other, e),
-            ReadError::EndOfStream => io::Error::new(io::ErrorKind::UnexpectedEof, e),
-            ReadError::FloatNotFinite |
-            ReadError::UnknownVariant8(_) |
-            ReadError::UnknownVariant16(_) |
-            ReadError::UnknownVariant32(_) |
-            ReadError::UnknownVariant64(_) |
-            ReadError::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
-            ReadError::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
-            ReadError::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
-        }
-    }
-}
-
-/// The error returned from the [`write`](Protocol::write) and [`write_sync`](Protocol::write_sync) methods.
-#[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
-pub enum WriteError {
-    /// Tried to send a buffer with more than [`u64::MAX`] elements
-    #[error("tried to send a buffer with more than u64::MAX elements: {0}")]
-    BufSize(#[from] TryFromIntError),
-    /// An error variant you can use when manually implementing [`Protocol`]
-    #[error("{0}")]
-    Custom(String),
-    #[error(transparent)] Io(#[from] io::Error),
-    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
-    #[error(transparent)] Tungstenite(#[from] tungstenite::Error),
-    #[cfg(feature = "warp")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] warp::Error),
-}
-
-impl From<Infallible> for WriteError {
-    fn from(never: Infallible) -> Self {
-        match never {}
-    }
-}
-
-impl From<String> for WriteError {
-    fn from(s: String) -> Self {
-        Self::Custom(s)
-    }
-}
-
-impl<'a> From<&'a str> for WriteError {
-    fn from(s: &str) -> Self {
-        Self::Custom(s.to_owned())
-    }
-}
-
-impl<'a> From<Cow<'a, str>> for WriteError {
-    fn from(s: Cow<'a, str>) -> Self {
-        Self::Custom(s.into_owned())
-    }
-}
-
-impl From<WriteError> for io::Error {
-    fn from(e: WriteError) -> Self {
-        match e {
-            WriteError::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            WriteError::Io(e) => e,
-            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] WriteError::Tungstenite(e) => io::Error::new(io::ErrorKind::Other, e),
-            #[cfg(feature = "warp")] WriteError::Warp(e) => io::Error::new(io::ErrorKind::Other, e),
-            WriteError::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
-        }
-    }
-}
 
 /// This trait allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
 pub trait Protocol: Sized {
@@ -241,7 +101,10 @@ pub trait Protocol: Sized {
     ///
     /// ```
     /// use {
-    ///     std::net::TcpStream,
+    ///     std::{
+    ///         io,
+    ///         net::TcpStream,
+    ///     },
     ///     async_proto::Protocol,
     /// };
     ///
@@ -258,14 +121,15 @@ pub trait Protocol: Sized {
     ///         }
     ///     }
     ///
-    ///     fn try_read<T: Protocol>(&mut self) -> Result<Option<T>, async_proto::ReadError> {
+    ///     fn try_read<T: Protocol>(&mut self) -> io::Result<Option<T>> {
     ///         self.tcp_stream.set_nonblocking(true)?;
-    ///         T::try_read(&mut self.tcp_stream, &mut self.buf)
+    ///         Ok(T::try_read(&mut self.tcp_stream, &mut self.buf)?)
     ///     }
     ///
-    ///     fn write<T: Protocol>(&mut self, msg: &T) -> Result<(), async_proto::WriteError> {
+    ///     fn write<T: Protocol>(&mut self, msg: &T) -> io::Result<()> {
     ///         self.tcp_stream.set_nonblocking(false)?;
-    ///         msg.write_sync(&mut self.tcp_stream)
+    ///         msg.write_sync(&mut self.tcp_stream)?;
+    ///         Ok(())
     ///     }
     /// }
     /// ```
@@ -279,14 +143,20 @@ pub trait Protocol: Sized {
                     buf.drain(..buf.len() - value_len);
                     return Ok(Some(value))
                 }
-                Err(ReadError::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+                Err(ReadError { kind: ReadErrorKind::Io(e), .. }) if e.kind() == io::ErrorKind::UnexpectedEof => {}
                 Err(e) => return Err(e),
             }
             match stream.read(&mut temp_buf) {
-                Ok(0) => return Err(ReadError::EndOfStream),
+                Ok(0) => return Err(ReadError {
+                    context: ErrorContext::DefaultImpl,
+                    kind: ReadErrorKind::EndOfStream,
+                }),
                 Ok(n) => buf.extend_from_slice(&temp_buf[..n]),
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(ReadError {
+                    context: ErrorContext::DefaultImpl,
+                    kind: e.into(),
+                }),
             }
         }
     }
@@ -300,7 +170,13 @@ pub trait Protocol: Sized {
     /// The default implementation of this method is cancellation safe.
     fn read_ws<'a, R: Stream<Item = Result<tungstenite::Message, tungstenite::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
+            let packet = stream.try_next().await.map_err(|e| ReadError {
+                context: ErrorContext::DefaultImpl,
+                kind: e.into(),
+            })?.ok_or_else(|| ReadError {
+                context: ErrorContext::DefaultImpl,
+                kind: ReadErrorKind::EndOfStream,
+            })?;
             Self::read_sync(&mut &*packet.into_data())
         })
     }
@@ -317,7 +193,10 @@ pub trait Protocol: Sized {
         Box::pin(async move {
             let mut buf = Vec::default();
             self.write(&mut buf).await?;
-            sink.send(tungstenite::Message::binary(buf)).await?;
+            sink.send(tungstenite::Message::binary(buf)).await.map_err(|e| WriteError {
+                context: ErrorContext::DefaultImpl,
+                kind: e.into(),
+            })?;
             Ok(())
         })
     }
@@ -332,9 +211,20 @@ pub trait Protocol: Sized {
     fn read_warp<'a, R: Stream<Item = Result<warp::filters::ws::Message, warp::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             loop {
-                let packet = stream.try_next().await?.ok_or(ReadError::EndOfStream)?;
+                let packet = stream.try_next().await.map_err(|e| ReadError {
+                    context: ErrorContext::DefaultImpl,
+                    kind: e.into(),
+                })?.ok_or_else(|| ReadError {
+                    context: ErrorContext::DefaultImpl,
+                    kind: ReadErrorKind::EndOfStream,
+                })?;
                 if packet.is_ping() || packet.is_pong() { continue }
-                if packet.is_close() { return Err(ReadError::EndOfStream) }
+                if packet.is_close() {
+                    return Err(ReadError {
+                        context: ErrorContext::DefaultImpl,
+                        kind: ReadErrorKind::EndOfStream,
+                    })
+                }
                 break Self::read_sync(&mut packet.as_bytes())
             }
         })
@@ -364,7 +254,10 @@ pub trait Protocol: Sized {
         Box::pin(async move {
             let mut buf = Vec::default();
             self.write(&mut buf).await?;
-            sink.send(warp::filters::ws::Message::binary(buf)).await?;
+            sink.send(warp::filters::ws::Message::binary(buf)).await.map_err(|e| WriteError {
+                context: ErrorContext::DefaultImpl,
+                kind: e.into(),
+            })?;
             Ok(())
         })
     }
@@ -373,7 +266,10 @@ pub trait Protocol: Sized {
     #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
     /// Reads a value of this type from a [`tungstenite`] websocket.
     fn read_ws_sync(websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
-        let packet = websocket.read()?;
+        let packet = websocket.read().map_err(|e| ReadError {
+            context: ErrorContext::DefaultImpl,
+            kind: e.into(),
+        })?;
         Self::read_sync(&mut &*packet.into_data())
     }
 
@@ -383,8 +279,14 @@ pub trait Protocol: Sized {
     fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
         let mut buf = Vec::default();
         self.write_sync(&mut buf)?;
-        websocket.send(tungstenite::Message::binary(buf))?;
-        websocket.flush()?;
+        websocket.send(tungstenite::Message::binary(buf)).map_err(|e| WriteError {
+            context: ErrorContext::DefaultImpl,
+            kind: e.into(),
+        })?;
+        websocket.flush().map_err(|e| WriteError {
+            context: ErrorContext::DefaultImpl,
+            kind: e.into(),
+        })?;
         Ok(())
     }
 }

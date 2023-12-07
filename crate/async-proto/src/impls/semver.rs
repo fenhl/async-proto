@@ -2,7 +2,7 @@ use {
     async_proto_derive::impl_protocol_for,
     crate::{
         Protocol,
-        ReadError,
+        ReadErrorKind,
     },
 };
 
@@ -11,10 +11,10 @@ use {
 struct IdentifierProxy(String);
 
 impl TryFrom<IdentifierProxy> for semver::Prerelease {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(IdentifierProxy(s): IdentifierProxy) -> Result<Self, ReadError> {
-        s.parse::<Self>().map_err(|e| ReadError::Custom(e.to_string()))
+    fn try_from(IdentifierProxy(s): IdentifierProxy) -> Result<Self, ReadErrorKind> {
+        s.parse::<Self>().map_err(|e| ReadErrorKind::Custom(e.to_string()))
     }
 }
 
@@ -25,10 +25,10 @@ impl<'a> From<&'a semver::Prerelease> for IdentifierProxy {
 }
 
 impl TryFrom<IdentifierProxy> for semver::BuildMetadata {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(IdentifierProxy(s): IdentifierProxy) -> Result<Self, ReadError> {
-        s.parse::<Self>().map_err(|e| ReadError::Custom(e.to_string()))
+    fn try_from(IdentifierProxy(s): IdentifierProxy) -> Result<Self, ReadErrorKind> {
+        s.parse::<Self>().map_err(|e| ReadErrorKind::Custom(e.to_string()))
     }
 }
 

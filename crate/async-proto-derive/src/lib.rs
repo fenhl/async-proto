@@ -1,7 +1,7 @@
 #![deny(missing_docs, rust_2018_idioms, unused, unused_crate_dependencies, unused_import_braces, unused_lifetimes, unused_qualifications, warnings)]
 #![forbid(unsafe_code)]
 
-//! Procedural macros for the `async-proto` crate.
+//! Procedural macros for the [`async-proto`](https://docs.rs/async-proto) crate.
 
 use {
     std::convert::TryFrom as _,
@@ -34,16 +34,32 @@ fn read_fields(internal: bool, sync: bool, fields: &Fields) -> proc_macro2::Toke
         Fields::Unit => quote!(),
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
             let read_fields = unnamed.iter()
-                .map(|Field { ty, .. }| quote_spanned! {ty.span()=>
-                    <#ty as #async_proto_crate::Protocol>#read?
+                .enumerate()
+                .map(|(idx, Field { ty, .. })| quote_spanned! {ty.span()=>
+                    <#ty as #async_proto_crate::Protocol>#read.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                        context: #async_proto_crate::ErrorContext::UnnamedField {
+                            idx: #idx,
+                            source: Box::new(context),
+                        },
+                        kind,
+                    })?
                 })
                 .collect_vec();
             quote!((#(#read_fields,)*))
         }
         Fields::Named(FieldsNamed { named, .. }) => {
             let read_fields = named.iter()
-                .map(|Field { ident, ty, .. }| quote_spanned! {ty.span()=>
-                    #ident: <#ty as #async_proto_crate::Protocol>#read?
+                .map(|Field { ident, ty, .. }| {
+                    let name = ident.as_ref().expect("FieldsNamed with unnamed field").to_string();
+                    quote_spanned! {ty.span()=>
+                        #ident: <#ty as #async_proto_crate::Protocol>#read.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                            context: #async_proto_crate::ErrorContext::NamedField {
+                                name: #name,
+                                source: Box::new(context),
+                            },
+                            kind,
+                        })?
+                    }
                 })
                 .collect_vec();
             quote!({ #(#read_fields,)* })
@@ -70,8 +86,9 @@ fn fields_pat(fields: &Fields) -> proc_macro2::TokenStream {
     }
 }
 
-fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
-    let write = if sync { quote!(.write_sync(sink)?) } else { quote!(.write(sink).await?) };
+fn write_fields(internal: bool, sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
+    let async_proto_crate = if internal { quote!(crate) } else { quote!(::async_proto) };
+    let write = if sync { quote!(.write_sync(sink)) } else { quote!(.write(sink).await) };
     match fields {
         Fields::Unit => quote!(),
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
@@ -80,7 +97,14 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
                 .map(|(idx, _)| Ident::new(&format!("__field{}", idx), Span::call_site()))
                 .collect_vec();
             let write_fields = field_idents.iter()
-                .map(|ident| quote!(#ident #write;));
+                .enumerate()
+                .map(|(idx, ident)| quote!(#ident #write.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                    context: #async_proto_crate::ErrorContext::UnnamedField {
+                        idx: #idx,
+                        source: Box::new(context),
+                    },
+                    kind,
+                })?;));
             quote!(#(#write_fields)*)
         }
         Fields::Named(FieldsNamed { named, .. }) => {
@@ -88,7 +112,16 @@ fn write_fields(sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
                 .map(|Field { ident, .. }| ident)
                 .collect_vec();
             let write_fields = field_idents.iter()
-                .map(|ident| quote!(#ident #write;));
+                .map(|ident| {
+                    let name = ident.as_ref().expect("FieldsNamed with unnamed field").to_string();
+                    quote!(#ident #write.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                        context: #async_proto_crate::ErrorContext::NamedField {
+                            name: #name,
+                            source: Box::new(context),
+                        },
+                        kind,
+                    })?;)
+                });
             quote!(#(#write_fields)*)
         }
     }
@@ -183,12 +216,38 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
     };
     let (impl_read, impl_write, impl_read_sync, impl_write_sync) = if as_string {
         if internal && data.is_some() { return quote!(compile_error!("redundant type layout specification with #[async_proto(as_string)]");).into() }
-        let map_err = map_err.unwrap_or(parse_quote!(::core::convert::Into::<#async_proto_crate::ReadError>::into));
+        let map_err = map_err.unwrap_or(parse_quote!(::core::convert::Into::<#async_proto_crate::ReadErrorKind>::into));
         (
-            quote!(<Self as ::std::str::FromStr>::from_str(&<::std::string::String as #async_proto_crate::Protocol>::read(stream).await?).map_err(#map_err)),
-            quote!(<::std::string::String as #async_proto_crate::Protocol>::write(&<Self as ::std::string::ToString>::to_string(self), sink).await),
-            quote!(<Self as ::std::str::FromStr>::from_str(&<::std::string::String as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(#map_err)),
-            quote!(<::std::string::String as #async_proto_crate::Protocol>::write_sync(&<Self as ::std::string::ToString>::to_string(self), sink)),
+            quote!(<Self as ::std::str::FromStr>::from_str(&<::std::string::String as #async_proto_crate::Protocol>::read(stream).await.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::AsString {
+                    source: Box::new(context),
+                },
+                kind,
+            })?).map_err(|e| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::FromStr,
+                kind: (#map_err)(e),
+            })),
+            quote!(<::std::string::String as #async_proto_crate::Protocol>::write(&<Self as ::std::string::ToString>::to_string(self), sink).await.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                context: #async_proto_crate::ErrorContext::AsString {
+                    source: Box::new(context),
+                },
+                kind,
+            })),
+            quote!(<Self as ::std::str::FromStr>::from_str(&<::std::string::String as #async_proto_crate::Protocol>::read_sync(stream).map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::AsString {
+                    source: Box::new(context),
+                },
+                kind,
+            })?).map_err(|e| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::FromStr,
+                kind: (#map_err)(e),
+            })),
+            quote!(<::std::string::String as #async_proto_crate::Protocol>::write_sync(&<Self as ::std::string::ToString>::to_string(self), sink).map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                context: #async_proto_crate::ErrorContext::AsString {
+                    source: Box::new(context),
+                },
+                kind,
+            })),
         )
     } else if let Some(proxy_ty) = via {
         if internal && data.is_some() { return quote!(compile_error!("redundant type layout specification with #[async_proto(via = ...)]");).into() }
@@ -203,12 +262,38 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                 quote!(<&Self as ::core::convert::Into<#proxy_ty>>::into(self)),
             )
         };
-        let map_err = map_err.unwrap_or(parse_quote!(::core::convert::Into::<#async_proto_crate::ReadError>::into));
+        let map_err = map_err.unwrap_or(parse_quote!(::core::convert::Into::<#async_proto_crate::ReadErrorKind>::into));
         (
-            quote!(<#proxy_ty as ::core::convert::TryInto<Self>>::try_into(<#proxy_ty as #async_proto_crate::Protocol>::read(stream).await?).map_err(#map_err)),
-            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write(&#write_proxy, sink).await),
-            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read_sync(stream)?).map_err(#map_err)),
-            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write_sync(&#write_sync_proxy, sink)),
+            quote!(<#proxy_ty as ::core::convert::TryInto<Self>>::try_into(<#proxy_ty as #async_proto_crate::Protocol>::read(stream).await.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::Via {
+                    source: Box::new(context),
+                },
+                kind,
+            })?).map_err(|e| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::TryInto,
+                kind: (#map_err)(e),
+            })),
+            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write(&#write_proxy, sink).await.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                context: #async_proto_crate::ErrorContext::Via {
+                    source: Box::new(context),
+                },
+                kind,
+            })),
+            quote!(<Self as ::core::convert::TryFrom<#proxy_ty>>::try_from(<#proxy_ty as #async_proto_crate::Protocol>::read_sync(stream).map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::Via {
+                    source: Box::new(context),
+                },
+                kind,
+            })?).map_err(|e| #async_proto_crate::ReadError {
+                context: #async_proto_crate::ErrorContext::TryInto,
+                kind: (#map_err)(e),
+            })),
+            quote!(<#proxy_ty as #async_proto_crate::Protocol>::write_sync(&#write_sync_proxy, sink).map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                context: #async_proto_crate::ErrorContext::Via {
+                    source: Box::new(context),
+                },
+                kind,
+            })),
         )
     } else {
         if map_err.is_some() { return quote!(compile_error!("#[async_proto(map_err = ...)] does nothing without #[async_proto(as_string)] or #[async_proto(via = ...)]");).into() }
@@ -216,9 +301,9 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
             Some(Data::Struct(DataStruct { fields, .. })) => {
                 let fields_pat = fields_pat(&fields);
                 let read_fields_async = read_fields(internal, false, &fields);
-                let write_fields_async = write_fields(false, &fields);
+                let write_fields_async = write_fields(internal, false, &fields);
                 let read_fields_sync = read_fields(internal, true, &fields);
-                let write_fields_sync = write_fields(true, &fields);
+                let write_fields_sync = write_fields(internal, true, &fields);
                 (
                     quote!(::core::result::Result::Ok(Self #read_fields_async)),
                     quote! {
@@ -237,9 +322,15 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
             Some(Data::Enum(DataEnum { variants, .. })) => {
                 if variants.is_empty() {
                     (
-                        quote!(::core::result::Result::Err(#async_proto_crate::ReadError::ReadNever)),
+                        quote!(::core::result::Result::Err(#async_proto_crate::ReadError {
+                            context: #async_proto_crate::ErrorContext::Derived,
+                            kind: #async_proto_crate::ReadErrorKind::ReadNever,
+                        })),
                         quote!(match *self {}),
-                        quote!(::core::result::Result::Err(#async_proto_crate::ReadError::ReadNever)),
+                        quote!(::core::result::Result::Err(#async_proto_crate::ReadError {
+                            context: #async_proto_crate::ErrorContext::Derived,
+                            kind: #async_proto_crate::ReadErrorKind::ReadNever,
+                        })),
                         quote!(match *self {}),
                     )
                 } else {
@@ -282,10 +373,15 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                         .map(|(idx, Variant { ident: var, fields, .. })| {
                             let idx = get_discrim(idx);
                             let fields_pat = fields_pat(&fields);
-                            let write_fields = write_fields(false, fields);
+                            let write_fields = write_fields(internal, false, fields);
                             quote! {
                                 Self::#var #fields_pat => {
-                                    #idx.write(sink).await?;
+                                    #idx.write(sink).await.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                                        context: #async_proto_crate::ErrorContext::EnumDiscrim {
+                                            source: Box::new(context),
+                                        },
+                                        kind,
+                                    })?;
                                     #write_fields
                                 }
                             }
@@ -304,10 +400,15 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                         .map(|(idx, Variant { ident: var, fields, .. })| {
                             let idx = get_discrim(idx);
                             let fields_pat = fields_pat(&fields);
-                            let write_fields = write_fields(true, fields);
+                            let write_fields = write_fields(internal, true, fields);
                             quote! {
                                 Self::#var #fields_pat => {
-                                    #idx.write_sync(sink)?;
+                                    #idx.write_sync(sink).map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                                        context: #async_proto_crate::ErrorContext::EnumDiscrim {
+                                            source: Box::new(context),
+                                        },
+                                        kind,
+                                    })?;
                                     #write_fields
                                 }
                             }
@@ -315,9 +416,17 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                         .collect_vec();
                     (
                         quote! {
-                            match <#discrim_ty as #async_proto_crate::Protocol>::read(stream).await? {
+                            match <#discrim_ty as #async_proto_crate::Protocol>::read(stream).await.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                                context: #async_proto_crate::ErrorContext::EnumDiscrim {
+                                    source: Box::new(context),
+                                },
+                                kind,
+                            })? {
                                 #(#read_arms,)*
-                                n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
+                                n => ::core::result::Result::Err(#async_proto_crate::ReadError {
+                                    context: #async_proto_crate::ErrorContext::Derived,
+                                    kind: #async_proto_crate::ReadErrorKind::#unknown_variant_variant(n),
+                                }),
                             }
                         },
                         quote! {
@@ -327,9 +436,17 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                             ::core::result::Result::Ok(())
                         },
                         quote! {
-                            match <#discrim_ty as #async_proto_crate::Protocol>::read_sync(stream)? {
+                            match <#discrim_ty as #async_proto_crate::Protocol>::read_sync(stream).map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                                context: #async_proto_crate::ErrorContext::EnumDiscrim {
+                                    source: Box::new(context),
+                                },
+                                kind,
+                            })? {
                                 #(#read_sync_arms,)*
-                                n => ::core::result::Result::Err(#async_proto_crate::ReadError::#unknown_variant_variant(n)),
+                                n => ::core::result::Result::Err(#async_proto_crate::ReadError {
+                                    context: #async_proto_crate::ErrorContext::Derived,
+                                    kind: #async_proto_crate::ReadErrorKind::#unknown_variant_variant(n),
+                                }),
                             }
                         },
                         quote! {
@@ -378,12 +495,12 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
 ///
 /// This macro's behavior can be modified using attributes. Multiple attributes can be specified as `#[async_proto(attr1, attr2, ...)]` or `#[async_proto(attr1)] #[async_proto(attr2)] ...`. The following attributes are available:
 ///
-/// * `#[async_proto(as_string)]`: Implements `Protocol` for this type by converting from and to a string using the `FromStr` and `ToString` traits. The `FromStr` error type must implement `Into<ReadError>`.
-///     * `#[async_proto(map_err = ...)]`: Removes the requirement for the `FromStr` error type to implement `Into<ReadError>` and instead uses the given expression (which should be an `FnOnce(<T as FromStr>::Err) -> ReadError`) to convert the error.
+/// * `#[async_proto(as_string)]`: Implements `Protocol` for this type by converting from and to a string using the `FromStr` and `ToString` traits. The `FromStr` error type must implement `Into<ReadErrorKind>`.
+///     * `#[async_proto(map_err = ...)]`: Removes the requirement for the `FromStr` error type to implement `Into<ReadErrorKind>` and instead uses the given expression (which should be an `FnOnce(<T as FromStr>::Err) -> ReadErrorKind`) to convert the error.
 /// * `#[async_proto(attr(...))]`: Adds the given attribute(s) to the `Protocol` implementation. For example, the implementation can be documented using `#[async_proto(attr(doc = "..."))]`. May be specified multiple times.
-/// * `#[async_proto(via = Proxy)]`: Implements `Protocol` for this type (let's call it `T`) in terms of another type (`Proxy` in this case) instead of using the variant- and field-based representation described above. `&'a T` must implement `Into<Proxy>` for all `'a`, and `Proxy` must implement `Protocol` and `TryInto<T>` with an `Error` type that implements `Into<ReadError>`.
+/// * `#[async_proto(via = Proxy)]`: Implements `Protocol` for this type (let's call it `T`) in terms of another type (`Proxy` in this case) instead of using the variant- and field-based representation described above. `&'a T` must implement `Into<Proxy>` for all `'a`, and `Proxy` must implement `Protocol` and `TryInto<T>` with an `Error` type that implements `Into<ReadErrorKind>`.
 ///     * `#[async_proto(clone)]`: Replaces the requirement for `&'a T` to implement `Into<Proxy>` with requirements for `T` to implement `Clone` and `Into<Proxy>`.
-///     * `#[async_proto(map_err = ...)]`: Removes the requirement for `<Proxy as TryInto<T>>::Error` to implement `Into<ReadError>` and instead uses the given expression (which should be an `FnOnce(<Proxy as TryInto<T>>::Error) -> ReadError`) to convert the error.
+///     * `#[async_proto(map_err = ...)]`: Removes the requirement for `<Proxy as TryInto<T>>::Error` to implement `Into<ReadErrorKind>` and instead uses the given expression (which should be an `FnOnce(<Proxy as TryInto<T>>::Error) -> ReadErrorKind`) to convert the error.
 /// * `#[async_proto(where(...))]`: Overrides the bounds for the generated `Protocol` implementation. The default is to require `Protocol + Send + Sync + 'static` for each type parameter of this type.
 ///
 /// # Compile errors
@@ -495,22 +612,42 @@ pub fn bitflags(input: TokenStream) -> TokenStream {
         impl ::async_proto::Protocol for #name {
             fn read<'a, R: ::async_proto::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: &'a mut R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<Self, ::async_proto::ReadError>> + ::core::marker::Send + 'a>> {
                 ::std::boxed::Box::pin(async move {
-                    Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read(stream).await?))
+                    Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read(stream).await.map_err(|::async_proto::ReadError { context, kind }| ::async_proto::ReadError {
+                        context: ::async_proto::ErrorContext::Bitflags {
+                            source: Box::new(context),
+                        },
+                        kind,
+                    })?))
                 })
             }
 
             fn write<'a, W: ::async_proto::tokio::io::AsyncWrite + ::core::marker::Unpin + ::core::marker::Send + 'a>(&'a self, sink: &'a mut W) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<(), ::async_proto::WriteError>> + ::core::marker::Send + 'a>> {
                 ::std::boxed::Box::pin(async move {
-                    <#repr as ::async_proto::Protocol>::write(&self.bits(), sink).await
+                    <#repr as ::async_proto::Protocol>::write(&self.bits(), sink).await.map_err(|::async_proto::WriteError { context, kind }| ::async_proto::WriteError {
+                        context: ::async_proto::ErrorContext::Bitflags {
+                            source: Box::new(context),
+                        },
+                        kind,
+                    })
                 })
             }
 
             fn read_sync(stream: &mut impl ::std::io::Read) -> ::core::result::Result<Self, ::async_proto::ReadError> {
-                Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read_sync(stream)?))
+                Ok(Self::from_bits_truncate(<#repr as ::async_proto::Protocol>::read_sync(stream).map_err(|::async_proto::ReadError { context, kind }| ::async_proto::ReadError {
+                    context: ::async_proto::ErrorContext::Bitflags {
+                        source: Box::new(context),
+                    },
+                    kind,
+                })?))
             }
 
             fn write_sync(&self, sink: &mut impl ::std::io::Write) -> ::core::result::Result<(), ::async_proto::WriteError> {
-                <#repr as ::async_proto::Protocol>::write_sync(&self.bits(), sink)
+                <#repr as ::async_proto::Protocol>::write_sync(&self.bits(), sink).map_err(|::async_proto::WriteError { context, kind }| ::async_proto::WriteError {
+                    context: ::async_proto::ErrorContext::Bitflags {
+                        source: Box::new(context),
+                    },
+                    kind,
+                })
             }
         }
     })

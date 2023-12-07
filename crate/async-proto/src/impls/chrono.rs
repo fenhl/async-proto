@@ -6,7 +6,7 @@ use {
     async_proto_derive::impl_protocol_for,
     crate::{
         Protocol,
-        ReadError,
+        ReadErrorKind,
     },
 };
 
@@ -17,10 +17,10 @@ struct NaiveDateProxy {
 }
 
 impl TryFrom<NaiveDateProxy> for NaiveDate {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(NaiveDateProxy { num_days_from_ce }: NaiveDateProxy) -> Result<Self, ReadError> {
-        Self::from_num_days_from_ce_opt(num_days_from_ce).ok_or_else(|| ReadError::Custom(format!("out-of-range date")))
+    fn try_from(NaiveDateProxy { num_days_from_ce }: NaiveDateProxy) -> Result<Self, ReadErrorKind> {
+        Self::from_num_days_from_ce_opt(num_days_from_ce).ok_or_else(|| ReadErrorKind::Custom(format!("out-of-range date")))
     }
 }
 
@@ -37,10 +37,10 @@ struct FixedOffsetProxy {
 }
 
 impl TryFrom<FixedOffsetProxy> for FixedOffset {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(FixedOffsetProxy { east }: FixedOffsetProxy) -> Result<Self, ReadError> {
-        Self::east_opt(east).ok_or_else(|| ReadError::Custom(format!("FixedOffset::east out of bounds")))
+    fn try_from(FixedOffsetProxy { east }: FixedOffsetProxy) -> Result<Self, ReadErrorKind> {
+        Self::east_opt(east).ok_or_else(|| ReadErrorKind::Custom(format!("FixedOffset::east out of bounds")))
     }
 }
 
@@ -59,13 +59,13 @@ struct DateTimeProxy<Tz: TimeZone> {
 }
 
 impl<Tz: TimeZone> TryFrom<DateTimeProxy<Tz>> for DateTime<Tz> {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(DateTimeProxy { timezone, timestamp, timestamp_subsec_nanos }: DateTimeProxy<Tz>) -> Result<Self, ReadError> {
+    fn try_from(DateTimeProxy { timezone, timestamp, timestamp_subsec_nanos }: DateTimeProxy<Tz>) -> Result<Self, ReadErrorKind> {
         match timezone.timestamp_opt(timestamp, timestamp_subsec_nanos) {
             LocalResult::Single(dt) => Ok(dt),
-            LocalResult::None => Err(ReadError::Custom(format!("read a nonexistent timestamp"))),
-            LocalResult::Ambiguous(dt1, dt2) => Err(ReadError::Custom(format!("read an ambiguous timestamp that could refer to {:?} or {:?}", dt1, dt2))),
+            LocalResult::None => Err(ReadErrorKind::Custom(format!("read a nonexistent timestamp"))),
+            LocalResult::Ambiguous(dt1, dt2) => Err(ReadErrorKind::Custom(format!("read an ambiguous timestamp that could refer to {:?} or {:?}", dt1, dt2))),
         }
     }
 }

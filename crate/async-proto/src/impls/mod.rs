@@ -39,8 +39,10 @@ use {
     },
     async_proto_derive::impl_protocol_for,
     crate::{
+        ErrorContext,
         Protocol,
         ReadError,
+        ReadErrorKind,
         WriteError,
     },
 };
@@ -60,22 +62,34 @@ macro_rules! impl_protocol_primitive {
         impl Protocol for $ty {
             fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
                 Box::pin(async move {
-                    Ok(stream.$read().await?)
+                    Ok(stream.$read().await.map_err(|e| ReadError {
+                        context: ErrorContext::BuiltIn { for_type: stringify!($ty) },
+                        kind: e.into(),
+                    })?)
                 })
             }
 
             fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
                 Box::pin(async move {
-                    Ok(sink.$write(*self).await?)
+                    Ok(sink.$write(*self).await.map_err(|e| WriteError {
+                        context: ErrorContext::BuiltIn { for_type: stringify!($ty) },
+                        kind: e.into(),
+                    })?)
                 })
             }
 
             fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-                Ok(stream.$read$(::<$endian>)?()?)
+                Ok(stream.$read$(::<$endian>)?().map_err(|e| ReadError {
+                    context: ErrorContext::BuiltIn { for_type: stringify!($ty) },
+                    kind: e.into(),
+                })?)
             }
 
             fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-                Ok(sink.$write$(::<$endian>)?(*self)?)
+                Ok(sink.$write$(::<$endian>)?(*self).map_err(|e| WriteError {
+                    context: ErrorContext::BuiltIn { for_type: stringify!($ty) },
+                    kind: e.into(),
+                })?)
             }
         }
     };
@@ -222,7 +236,10 @@ impl Protocol for bool {
             Ok(match u8::read(stream).await? {
                 0 => false,
                 1 => true,
-                n => return Err(ReadError::UnknownVariant8(n)),
+                n => return Err(ReadError {
+                    context: ErrorContext::BuiltIn { for_type: "bool" },
+                    kind: ReadErrorKind::UnknownVariant8(n),
+                }),
             })
         })
     }
@@ -237,7 +254,10 @@ impl Protocol for bool {
         Ok(match u8::read_sync(stream)? {
             0 => false,
             1 => true,
-            n => return Err(ReadError::UnknownVariant8(n)),
+            n => return Err(ReadError {
+                context: ErrorContext::BuiltIn { for_type: "bool" },
+                kind: ReadErrorKind::UnknownVariant8(n),
+            }),
         })
     }
 
@@ -274,7 +294,10 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut buf = Self::with_capacity(len.try_into()?);
+            let mut buf = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "Vec" },
+                kind: e.into(),
+            })?);
             for _ in 0..len {
                 buf.push(T::read(stream).await?);
             }
@@ -284,7 +307,10 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "Vec" },
+                kind: e.into(),
+            })?.write(sink).await?;
             for elt in self {
                 elt.write(sink).await?;
             }
@@ -294,7 +320,10 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut buf = Self::with_capacity(len.try_into()?);
+        let mut buf = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "Vec" },
+            kind: e.into(),
+        })?);
         for _ in 0..len {
             buf.push(T::read_sync(stream)?);
         }
@@ -302,7 +331,10 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "Vec" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
         for elt in self {
             elt.write_sync(sink)?;
         }
@@ -315,7 +347,10 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            usize::try_from(len)?; // error here rather than panicking in the insert loop
+            usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
+                kind: e.into(),
+            })?; // error here rather than panicking in the insert loop
             let mut set = Self::default();
             for _ in 0..len {
                 set.insert(T::read(stream).await?);
@@ -326,7 +361,10 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
+                kind: e.into(),
+            })?.write(sink).await?;
             for elt in self {
                 elt.write(sink).await?;
             }
@@ -336,7 +374,10 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        usize::try_from(len)?; // error here rather than panicking in the insert loop
+        usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
+            kind: e.into(),
+        })?; // error here rather than panicking in the insert loop
         let mut set = Self::default();
         for _ in 0..len {
             set.insert(T::read_sync(stream)?);
@@ -345,7 +386,10 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
         for elt in self {
             elt.write_sync(sink)?;
         }
@@ -358,7 +402,10 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut set = Self::with_capacity(len.try_into()?);
+            let mut set = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "HashSet" },
+                kind: e.into(),
+            })?);
             for _ in 0..len {
                 set.insert(T::read(stream).await?);
             }
@@ -368,7 +415,10 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "HashSet" },
+                kind: e.into(),
+            })?.write(sink).await?;
             for elt in self {
                 elt.write(sink).await?;
             }
@@ -378,7 +428,10 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut set = Self::with_capacity(len.try_into()?);
+        let mut set = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "HashSet" },
+            kind: e.into(),
+        })?);
         for _ in 0..len {
             set.insert(T::read_sync(stream)?);
         }
@@ -386,7 +439,10 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "HashSet" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
         for elt in self {
             elt.write_sync(sink)?;
         }
@@ -399,30 +455,60 @@ impl Protocol for String {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut buf = vec![0; len.try_into()?];
-            stream.read_exact(&mut buf).await?;
-            Ok(Self::from_utf8(buf)?)
+            let mut buf = vec![0; usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "String" },
+                kind: e.into(),
+            })?];
+            stream.read_exact(&mut buf).await.map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "String" },
+                kind: e.into(),
+            })?;
+            Ok(Self::from_utf8(buf).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "String" },
+                kind: e.into(),
+            })?)
         })
     }
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
-            sink.write(self.as_bytes()).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "String" },
+                kind: e.into(),
+            })?.write(sink).await?;
+            sink.write(self.as_bytes()).await.map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "String" },
+                kind: e.into(),
+            })?;
             Ok(())
         })
     }
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut buf = vec![0; len.try_into()?];
-        stream.read_exact(&mut buf)?;
-        Ok(Self::from_utf8(buf)?)
+        let mut buf = vec![0; usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "String" },
+            kind: e.into(),
+        })?];
+        stream.read_exact(&mut buf).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "String" },
+            kind: e.into(),
+        })?;
+        Ok(Self::from_utf8(buf).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "String" },
+            kind: e.into(),
+        })?)
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
-        sink.write(self.as_bytes())?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "String" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
+        sink.write(self.as_bytes()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "String" },
+            kind: e.into(),
+        })?;
         Ok(())
     }
 }
@@ -432,7 +518,10 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            usize::try_from(len)?; // error here rather than panicking in the insert loop
+            usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
+                kind: e.into(),
+            })?; // error here rather than panicking in the insert loop
             let mut map = Self::default();
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?);
@@ -443,7 +532,10 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
+                kind: e.into(),
+            })?.write(sink).await?;
             for (k, v) in self {
                 k.write(sink).await?;
                 v.write(sink).await?;
@@ -454,7 +546,10 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        usize::try_from(len)?; // error here rather than panicking in the insert loop
+        usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
+            kind: e.into(),
+        })?; // error here rather than panicking in the insert loop
         let mut map = Self::default();
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
@@ -463,7 +558,10 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
         for (k, v) in self {
             k.write_sync(sink)?;
             v.write_sync(sink)?;
@@ -477,7 +575,10 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut map = Self::with_capacity(len.try_into()?);
+            let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "HashMap" },
+                kind: e.into(),
+            })?);
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?);
             }
@@ -487,7 +588,10 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
 
     fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len())?.write(sink).await?;
+            u64::try_from(self.len()).map_err(|e| WriteError {
+                context: ErrorContext::BuiltIn { for_type: "HashMap" },
+                kind: e.into(),
+            })?.write(sink).await?;
             for (k, v) in self {
                 k.write(sink).await?;
                 v.write(sink).await?;
@@ -498,7 +602,10 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut map = Self::with_capacity(len.try_into()?);
+        let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "HashMap" },
+            kind: e.into(),
+        })?);
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
         }
@@ -506,7 +613,10 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len())?.write_sync(sink)?;
+        u64::try_from(self.len()).map_err(|e| WriteError {
+            context: ErrorContext::BuiltIn { for_type: "HashMap" },
+            kind: e.into(),
+        })?.write_sync(sink)?;
         for (k, v) in self {
             k.write_sync(sink)?;
             v.write_sync(sink)?;
@@ -605,43 +715,43 @@ impl<'a> From<&'a std::time::Duration> for DurationProxy {
 
 impl_protocol_for! {
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = u8, clone, map_err = |_| ReadError::UnknownVariant8(0))]
+    #[async_proto(via = u8, clone, map_err = |_| ReadErrorKind::UnknownVariant8(0))]
     type std::num::NonZeroU8;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = i8, clone, map_err = |_| ReadError::UnknownVariant8(0))]
+    #[async_proto(via = i8, clone, map_err = |_| ReadErrorKind::UnknownVariant8(0))]
     type std::num::NonZeroI8;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = u16, clone, map_err = |_| ReadError::UnknownVariant16(0))]
+    #[async_proto(via = u16, clone, map_err = |_| ReadErrorKind::UnknownVariant16(0))]
     type std::num::NonZeroU16;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = i16, clone, map_err = |_| ReadError::UnknownVariant16(0))]
+    #[async_proto(via = i16, clone, map_err = |_| ReadErrorKind::UnknownVariant16(0))]
     type std::num::NonZeroI16;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = u32, clone, map_err = |_| ReadError::UnknownVariant32(0))]
+    #[async_proto(via = u32, clone, map_err = |_| ReadErrorKind::UnknownVariant32(0))]
     type std::num::NonZeroU32;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = i32, clone, map_err = |_| ReadError::UnknownVariant32(0))]
+    #[async_proto(via = i32, clone, map_err = |_| ReadErrorKind::UnknownVariant32(0))]
     type std::num::NonZeroI32;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = u64, clone, map_err = |_| ReadError::UnknownVariant64(0))]
+    #[async_proto(via = u64, clone, map_err = |_| ReadErrorKind::UnknownVariant64(0))]
     type std::num::NonZeroU64;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = i64, clone, map_err = |_| ReadError::UnknownVariant64(0))]
+    #[async_proto(via = i64, clone, map_err = |_| ReadErrorKind::UnknownVariant64(0))]
     type std::num::NonZeroI64;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = u128, clone, map_err = |_| ReadError::UnknownVariant128(0))]
+    #[async_proto(via = u128, clone, map_err = |_| ReadErrorKind::UnknownVariant128(0))]
     type std::num::NonZeroU128;
 
     #[async_proto(attr(doc = "A nonzero integer is represented like its value."))]
-    #[async_proto(via = i128, clone, map_err = |_| ReadError::UnknownVariant128(0))]
+    #[async_proto(via = i128, clone, map_err = |_| ReadErrorKind::UnknownVariant128(0))]
     type std::num::NonZeroI128;
 
     #[async_proto(attr(doc = "Primitive number types are encoded in [big-endian](https://en.wikipedia.org/wiki/Big-endian) format."))]

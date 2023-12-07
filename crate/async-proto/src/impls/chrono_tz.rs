@@ -2,7 +2,7 @@ use {
     async_proto_derive::impl_protocol_for,
     crate::{
         Protocol,
-        ReadError,
+        ReadErrorKind,
     },
 };
 
@@ -13,10 +13,10 @@ struct TzProxy {
 }
 
 impl TryFrom<TzProxy> for chrono_tz::Tz {
-    type Error = ReadError;
+    type Error = ReadErrorKind;
 
-    fn try_from(TzProxy { name }: TzProxy) -> Result<Self, ReadError> {
-        name.parse().map_err(ReadError::Custom)
+    fn try_from(TzProxy { name }: TzProxy) -> Result<Self, ReadErrorKind> {
+        name.parse().map_err(ReadErrorKind::Custom)
     }
 }
 
