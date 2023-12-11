@@ -191,7 +191,10 @@ pub enum ErrorContext {
     /// The error was produced by the default implementation of a `Protocol` trait method.
     DefaultImpl,
     /// The error was produced by an automatically derived `Protocol` implementation.
-    Derived,
+    Derived {
+        /// The name of the type whose `Protocol` implementation produced the error.
+        for_type: &'static str,
+    },
     /// The error occurred while reading/writing the discriminant of an enum.
     EnumDiscrim {
         /// The context of the error returned from the discriminant type's `Protocol` implementation.

@@ -170,6 +170,7 @@ impl Parse for AsyncProtoAttr {
 }
 
 fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path, generics: Generics, data: Option<Data>) -> proc_macro2::TokenStream {
+    let for_type = quote!(#qual_ty).to_string();
     let mut as_string = false;
     let mut via = None;
     let mut clone = false;
@@ -323,12 +324,12 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                 if variants.is_empty() {
                     (
                         quote!(::core::result::Result::Err(#async_proto_crate::ReadError {
-                            context: #async_proto_crate::ErrorContext::Derived,
+                            context: #async_proto_crate::ErrorContext::Derived { for_type: #for_type },
                             kind: #async_proto_crate::ReadErrorKind::ReadNever,
                         })),
                         quote!(match *self {}),
                         quote!(::core::result::Result::Err(#async_proto_crate::ReadError {
-                            context: #async_proto_crate::ErrorContext::Derived,
+                            context: #async_proto_crate::ErrorContext::Derived { for_type: #for_type },
                             kind: #async_proto_crate::ReadErrorKind::ReadNever,
                         })),
                         quote!(match *self {}),
@@ -424,7 +425,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                             })? {
                                 #(#read_arms,)*
                                 n => ::core::result::Result::Err(#async_proto_crate::ReadError {
-                                    context: #async_proto_crate::ErrorContext::Derived,
+                                    context: #async_proto_crate::ErrorContext::Derived { for_type: #for_type },
                                     kind: #async_proto_crate::ReadErrorKind::#unknown_variant_variant(n),
                                 }),
                             }
@@ -444,7 +445,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
                             })? {
                                 #(#read_sync_arms,)*
                                 n => ::core::result::Result::Err(#async_proto_crate::ReadError {
-                                    context: #async_proto_crate::ErrorContext::Derived,
+                                    context: #async_proto_crate::ErrorContext::Derived { for_type: #for_type },
                                     kind: #async_proto_crate::ReadErrorKind::#unknown_variant_variant(n),
                                 }),
                             }
