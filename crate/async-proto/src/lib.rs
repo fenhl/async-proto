@@ -201,6 +201,46 @@ pub trait Protocol: Sized {
         })
     }
 
+    #[cfg(feature = "tungstenite")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
+    /// Reads a value of this type from a [`tungstenite`] websocket.
+    fn read_ws_sync(websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
+        let packet = websocket.read().map_err(|e| ReadError {
+            context: ErrorContext::DefaultImpl,
+            kind: e.into(),
+        })?;
+        Self::read_sync(&mut &*packet.into_data())
+    }
+
+    #[cfg(feature = "tungstenite")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
+    /// Writes a value of this type to a [`tungstenite`] websocket.
+    fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
+        let mut buf = Vec::default();
+        self.write_sync(&mut buf)?;
+        websocket.send(tungstenite::Message::binary(buf)).map_err(|e| WriteError {
+            context: ErrorContext::DefaultImpl,
+            kind: e.into(),
+        })?;
+        websocket.flush().map_err(|e| WriteError {
+            context: ErrorContext::DefaultImpl,
+            kind: e.into(),
+        })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "tokio-tungstenite")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
+    /// Takes ownership of an async websocket stream, reads a value of this type from it, then returns it along with the stream.
+    ///
+    /// This can be used to get around drop glue issues that might arise with `read_ws`.
+    fn read_ws_owned<R: Stream<Item = Result<tungstenite::Message, tungstenite::Error>> + Unpin + Send + 'static>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<(R, Self), ReadError>> + Send>> {
+        Box::pin(async move {
+            let value = Self::read_ws(&mut stream).await?;
+            Ok((stream, value))
+        })
+    }
+
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     /// Reads a value of this type from a [`warp`] websocket.
@@ -230,18 +270,6 @@ pub trait Protocol: Sized {
         })
     }
 
-    #[cfg(feature = "tokio-tungstenite")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-    /// Takes ownership of an async websocket stream, reads a value of this type from it, then returns it along with the stream.
-    ///
-    /// This can be used to get around drop glue issues that might arise with `read_ws`.
-    fn read_ws_owned<R: Stream<Item = Result<tungstenite::Message, tungstenite::Error>> + Unpin + Send + 'static>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<(R, Self), ReadError>> + Send>> {
-        Box::pin(async move {
-            let value = Self::read_ws(&mut stream).await?;
-            Ok((stream, value))
-        })
-    }
-
     #[cfg(feature = "warp")]
     #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
     /// Writes a value of this type to a [`warp`] websocket.
@@ -260,33 +288,5 @@ pub trait Protocol: Sized {
             })?;
             Ok(())
         })
-    }
-
-    #[cfg(feature = "tungstenite")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
-    /// Reads a value of this type from a [`tungstenite`] websocket.
-    fn read_ws_sync(websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
-        let packet = websocket.read().map_err(|e| ReadError {
-            context: ErrorContext::DefaultImpl,
-            kind: e.into(),
-        })?;
-        Self::read_sync(&mut &*packet.into_data())
-    }
-
-    #[cfg(feature = "tungstenite")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tungstenite")))]
-    /// Writes a value of this type to a [`tungstenite`] websocket.
-    fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
-        let mut buf = Vec::default();
-        self.write_sync(&mut buf)?;
-        websocket.send(tungstenite::Message::binary(buf)).map_err(|e| WriteError {
-            context: ErrorContext::DefaultImpl,
-            kind: e.into(),
-        })?;
-        websocket.flush().map_err(|e| WriteError {
-            context: ErrorContext::DefaultImpl,
-            kind: e.into(),
-        })?;
-        Ok(())
     }
 }
