@@ -21,6 +21,10 @@ pub enum ReadErrorKind {
     EndOfStream,
     #[error("received an infinite or NaN number")]
     FloatNotFinite,
+    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
+    /// Received a non-Binary WebSocket message (e.g. Text or Ping).
+    #[error("unexpected type of WebSocket message kind")]
+    MessageKind(tungstenite::Message),
     /// Attempted to read an empty type
     #[error("attempted to read an empty type")]
     ReadNever,
@@ -83,6 +87,7 @@ impl From<ReadErrorKind> for io::Error {
             ReadErrorKind::UnknownVariant32(_) |
             ReadErrorKind::UnknownVariant64(_) |
             ReadErrorKind::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadErrorKind::MessageKind(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
             ReadErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
         }
@@ -187,6 +192,11 @@ pub enum ErrorContext {
         ///
         /// Typically does not include type parameters.
         for_type: &'static str,
+    },
+    /// The error occurred while reading/writing a WebSocket message.
+    WebSocket {
+        /// The context of the error returned from the message's `Protocol` implementation.
+        source: Box<Self>,
     },
     /// The error was produced by the default implementation of a `Protocol` trait method.
     DefaultImpl,

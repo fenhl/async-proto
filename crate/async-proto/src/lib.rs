@@ -177,7 +177,18 @@ pub trait Protocol: Sized {
                 context: ErrorContext::DefaultImpl,
                 kind: ReadErrorKind::EndOfStream,
             })?;
-            Self::read_sync(&mut &*packet.into_data())
+            if !packet.is_binary() {
+                return Err(ReadError {
+                    context: ErrorContext::DefaultImpl,
+                    kind: ReadErrorKind::MessageKind(packet),
+                })
+            }
+            Self::read_sync(&mut &*packet.into_data()).map_err(|ReadError { context, kind }| ReadError {
+                context: ErrorContext::WebSocket {
+                    source: Box::new(context),
+                },
+                kind,
+            })
         })
     }
 
@@ -192,7 +203,12 @@ pub trait Protocol: Sized {
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
-            self.write(&mut buf).await?;
+            self.write(&mut buf).await.map_err(|WriteError { context, kind }| WriteError {
+                context: ErrorContext::WebSocket {
+                    source: Box::new(context),
+                },
+                kind,
+            })?;
             sink.send(tungstenite::Message::binary(buf)).await.map_err(|e| WriteError {
                 context: ErrorContext::DefaultImpl,
                 kind: e.into(),
@@ -209,7 +225,18 @@ pub trait Protocol: Sized {
             context: ErrorContext::DefaultImpl,
             kind: e.into(),
         })?;
-        Self::read_sync(&mut &*packet.into_data())
+        if !packet.is_binary() {
+            return Err(ReadError {
+                context: ErrorContext::DefaultImpl,
+                kind: ReadErrorKind::MessageKind(packet),
+            })
+        }
+        Self::read_sync(&mut &*packet.into_data()).map_err(|ReadError { context, kind }| ReadError {
+            context: ErrorContext::WebSocket {
+                source: Box::new(context),
+            },
+            kind,
+        })
     }
 
     #[cfg(feature = "tungstenite")]
@@ -217,7 +244,12 @@ pub trait Protocol: Sized {
     /// Writes a value of this type to a [`tungstenite`] websocket.
     fn write_ws_sync(&self, websocket: &mut tungstenite::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
         let mut buf = Vec::default();
-        self.write_sync(&mut buf)?;
+        self.write_sync(&mut buf).map_err(|WriteError { context, kind }| WriteError {
+            context: ErrorContext::WebSocket {
+                source: Box::new(context),
+            },
+            kind,
+        })?;
         websocket.send(tungstenite::Message::binary(buf)).map_err(|e| WriteError {
             context: ErrorContext::DefaultImpl,
             kind: e.into(),
