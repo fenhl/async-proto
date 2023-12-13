@@ -23,7 +23,7 @@ pub enum ReadErrorKind {
     FloatNotFinite,
     #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
     /// Received a non-Binary WebSocket message (e.g. Text or Ping).
-    #[error("unexpected type of WebSocket message kind")]
+    #[error("unexpected type of WebSocket message")]
     MessageKind(tungstenite::Message),
     /// Attempted to read an empty type
     #[error("attempted to read an empty type")]
