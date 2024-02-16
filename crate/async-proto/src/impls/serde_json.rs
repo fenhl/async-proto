@@ -26,7 +26,7 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
             let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
                 kind: e.into(),
-            })?);
+            })?); //TODO fallible allocation?
             for _ in 0..len {
                 map.insert(String::read(stream).await?, serde_json::Value::read(stream).await?);
             }
@@ -53,7 +53,7 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
         let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
             kind: e.into(),
-        })?);
+        })?); //TODO fallible allocation?
         for _ in 0..len {
             map.insert(String::read_sync(stream)?, serde_json::Value::read_sync(stream)?);
         }

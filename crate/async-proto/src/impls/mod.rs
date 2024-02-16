@@ -31,6 +31,10 @@ use {
         ReadBytesExt as _,
         WriteBytesExt as _,
     },
+    fallible_collections::{
+        FallibleBox,
+        FallibleVec as _,
+    },
     tokio::io::{
         AsyncRead,
         AsyncReadExt as _,
@@ -190,7 +194,10 @@ impl_protocol_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let mut vec = Vec::with_capacity(N);
+            let mut vec = Vec::try_with_capacity(N).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "[T; N]" },
+                kind: e.into(),
+            })?;
             for _ in 0..N {
                 vec.push(T::read(stream).await?);
             }
@@ -211,7 +218,10 @@ impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
     }
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let mut vec = Vec::with_capacity(N);
+        let mut vec = Vec::try_with_capacity(N).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "[T; N]" },
+            kind: e.into(),
+        })?;
         for _ in 0..N {
             vec.push(T::read_sync(stream)?);
         }
@@ -269,7 +279,10 @@ impl Protocol for bool {
 impl<T: Protocol> Protocol for Box<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            Ok(T::read(stream).await?.into()) //TODO use try_new once stabilized
+            Ok(<Box<_> as FallibleBox<_>>::try_new(T::read(stream).await?).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "Box" },
+                kind: e.into(),
+            })?)
         })
     }
 
@@ -278,7 +291,10 @@ impl<T: Protocol> Protocol for Box<T> {
     }
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        Ok(T::read_sync(stream)?.into()) //TODO use try_new once stabilized
+        Ok(<Box<_> as FallibleBox<_>>::try_new(T::read_sync(stream)?).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "Box" },
+            kind: e.into(),
+        })?)
     }
 
     fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
@@ -294,10 +310,13 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut buf = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+            let mut buf = Self::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "Vec" },
                 kind: e.into(),
-            })?);
+            })?).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "Vec" },
+                kind: e.into(),
+            })?;
             for _ in 0..len {
                 buf.push(T::read(stream).await?);
             }
@@ -320,10 +339,13 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut buf = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
+        let mut buf = Self::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "Vec" },
             kind: e.into(),
-        })?);
+        })?).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "Vec" },
+            kind: e.into(),
+        })?;
         for _ in 0..len {
             buf.push(T::read_sync(stream)?);
         }
@@ -353,7 +375,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
             })?; // error here rather than panicking in the insert loop
             let mut set = Self::default();
             for _ in 0..len {
-                set.insert(T::read(stream).await?);
+                set.insert(T::read(stream).await?); //TODO use fallible allocation once available
             }
             Ok(set)
         })
@@ -380,7 +402,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
         })?; // error here rather than panicking in the insert loop
         let mut set = Self::default();
         for _ in 0..len {
-            set.insert(T::read_sync(stream)?);
+            set.insert(T::read_sync(stream)?); //TODO use fallible allocation once available
         }
         Ok(set)
     }
@@ -405,7 +427,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
             let mut set = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "HashSet" },
                 kind: e.into(),
-            })?);
+            })?); //TODO use fallible allocation once available
             for _ in 0..len {
                 set.insert(T::read(stream).await?);
             }
@@ -431,7 +453,7 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
         let mut set = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "HashSet" },
             kind: e.into(),
-        })?);
+        })?); //TODO use fallible allocation once available
         for _ in 0..len {
             set.insert(T::read_sync(stream)?);
         }
@@ -455,10 +477,14 @@ impl Protocol for String {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut buf = vec![0; usize::try_from(len).map_err(|e| ReadError {
+            let mut buf = Vec::default();
+            buf.try_resize(usize::try_from(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "String" },
                 kind: e.into(),
-            })?];
+            })?, 0).map_err(|e| ReadError {
+                context: ErrorContext::BuiltIn { for_type: "String" },
+                kind: e.into(),
+            })?;
             stream.read_exact(&mut buf).await.map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "String" },
                 kind: e.into(),
@@ -486,10 +512,14 @@ impl Protocol for String {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut buf = vec![0; usize::try_from(len).map_err(|e| ReadError {
+        let mut buf = Vec::default();
+        buf.try_resize(usize::try_from(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "String" },
             kind: e.into(),
-        })?];
+        })?, 0).map_err(|e| ReadError {
+            context: ErrorContext::BuiltIn { for_type: "String" },
+            kind: e.into(),
+        })?;
         stream.read_exact(&mut buf).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "String" },
             kind: e.into(),
@@ -524,7 +554,7 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
             })?; // error here rather than panicking in the insert loop
             let mut map = Self::default();
             for _ in 0..len {
-                map.insert(K::read(stream).await?, V::read(stream).await?);
+                map.insert(K::read(stream).await?, V::read(stream).await?); //TODO use fallible allocation once available
             }
             Ok(map)
         })
@@ -552,7 +582,7 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
         })?; // error here rather than panicking in the insert loop
         let mut map = Self::default();
         for _ in 0..len {
-            map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
+            map.insert(K::read_sync(stream)?, V::read_sync(stream)?); //TODO use fallible allocation once available
         }
         Ok(map)
     }
@@ -578,7 +608,7 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
             let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "HashMap" },
                 kind: e.into(),
-            })?);
+            })?); //TODO use fallible allocation once available
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?);
             }
@@ -605,7 +635,7 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
         let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "HashMap" },
             kind: e.into(),
-        })?);
+        })?); //TODO use fallible allocation once available
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
         }

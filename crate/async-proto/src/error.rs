@@ -28,6 +28,8 @@ pub enum ReadErrorKind {
     /// Attempted to read an empty type
     #[error("attempted to read an empty type")]
     ReadNever,
+    #[error("{0:?}")] // fallible_collections::TryReserveError does not implement Error, see https://github.com/vcombey/fallible_collections/pull/44
+    TryReserve(fallible_collections::TryReserveError),
     #[error("unknown enum variant: {0}")]
     UnknownVariant8(u8),
     #[error("unknown enum variant: {0}")]
@@ -72,6 +74,12 @@ impl<'a> From<Cow<'a, str>> for ReadErrorKind {
     }
 }
 
+impl From<fallible_collections::TryReserveError> for ReadErrorKind {
+    fn from(e: fallible_collections::TryReserveError) -> Self {
+        Self::TryReserve(e)
+    }
+}
+
 impl From<ReadErrorKind> for io::Error {
     fn from(e: ReadErrorKind) -> Self {
         match e {
@@ -89,6 +97,7 @@ impl From<ReadErrorKind> for io::Error {
             ReadErrorKind::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadErrorKind::MessageKind(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
+            ReadErrorKind::TryReserve(_) => io::Error::new(io::ErrorKind::OutOfMemory, e),
             ReadErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
         }
     }

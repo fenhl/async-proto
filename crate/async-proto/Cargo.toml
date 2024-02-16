@@ -22,7 +22,7 @@ thiserror = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.17.0"
+version = "=0.18.0"
 
 [dependencies.bytes]
 version = "1"
@@ -40,6 +40,10 @@ optional = true
 [dependencies.either]
 version = "1"
 optional = true
+
+[dependencies.fallible_collections]
+version = "0.4"
+features = ["rust_1_57"]
 
 [dependencies.futures]
 version = "0.3"
