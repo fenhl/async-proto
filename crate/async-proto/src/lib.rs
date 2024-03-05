@@ -334,7 +334,7 @@ pub trait Protocol: Sized {
 /// Useful for WebSocket connections where the message type per direction is always the same.
 #[cfg(feature = "tokio-tungstenite")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
-pub async fn websocket<R: Protocol, W: Protocol>(request: impl tungstenite::client::IntoClientRequest + Unpin) -> tungstenite::Result<(impl Sink<W>, impl Stream<Item = Result<R, ReadError>>)> {
+pub async fn websocket<R: Protocol, W: Protocol>(request: impl tungstenite::client::IntoClientRequest + Unpin) -> tungstenite::Result<(impl Sink<W, Error = WriteError>, impl Stream<Item = Result<R, ReadError>>)> {
     let (sock, _) = tokio_tungstenite::connect_async(request).await?;
     let (sink, stream) = sock.split();
     Ok((
