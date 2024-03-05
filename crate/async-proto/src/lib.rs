@@ -50,6 +50,7 @@ use {
         TryStreamExt as _,
     },
 };
+#[cfg(feature = "tokio-tungstenite")] use futures::stream::StreamExt as _;
 pub use {
     async_proto_derive::{
         Protocol,
@@ -203,7 +204,7 @@ pub trait Protocol: Sized {
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
-            self.write(&mut buf).await.map_err(|WriteError { context, kind }| WriteError {
+            self.write_sync(&mut buf).map_err(|WriteError { context, kind }| WriteError {
                 context: ErrorContext::WebSocket {
                     source: Box::new(context),
                 },
@@ -313,7 +314,12 @@ pub trait Protocol: Sized {
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
-            self.write(&mut buf).await?;
+            self.write_sync(&mut buf).map_err(|WriteError { context, kind }| WriteError {
+                context: ErrorContext::WebSocket {
+                    source: Box::new(context),
+                },
+                kind,
+            })?;
             sink.send(warp::filters::ws::Message::binary(buf)).await.map_err(|e| WriteError {
                 context: ErrorContext::DefaultImpl,
                 kind: e.into(),
@@ -321,4 +327,46 @@ pub trait Protocol: Sized {
             Ok(())
         })
     }
+}
+
+/// Establishes a WebSocket connection to the given URL and returns a typed sink/stream pair.
+///
+/// Useful for WebSocket connections where the message type per direction is always the same.
+#[cfg(feature = "tokio-tungstenite")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite")))]
+pub async fn websocket<R: Protocol, W: Protocol>(request: impl tungstenite::client::IntoClientRequest + Unpin) -> tungstenite::Result<(impl Sink<W>, impl Stream<Item = Result<R, ReadError>>)> {
+    let (sock, _) = tokio_tungstenite::connect_async(request).await?;
+    let (sink, stream) = sock.split();
+    Ok((
+        sink.sink_map_err(|e| WriteError {
+            context: ErrorContext::WebSocketSink,
+            kind: e.into(),
+        }).with::<W, _, _, WriteError>(|msg| async move {
+            let mut buf = Vec::default();
+            msg.write_sync(&mut buf).map_err(|WriteError { context, kind }| WriteError {
+                context: ErrorContext::WebSocket {
+                    source: Box::new(context),
+                },
+                kind,
+            })?;
+            Ok(tungstenite::Message::binary(buf))
+        }),
+        stream.map_err(|e| ReadError {
+            context: ErrorContext::WebSocketStream,
+            kind: e.into(),
+        }).and_then(|packet| async move {
+            if !packet.is_binary() {
+                return Err(ReadError {
+                    context: ErrorContext::WebSocketStream,
+                    kind: ReadErrorKind::MessageKind(packet),
+                })
+            }
+            R::read_sync(&mut &*packet.into_data()).map_err(|ReadError { context, kind }| ReadError {
+                context: ErrorContext::WebSocket {
+                    source: Box::new(context),
+                },
+                kind,
+            })
+        }),
+    ))
 }

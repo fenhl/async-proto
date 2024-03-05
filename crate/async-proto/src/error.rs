@@ -207,6 +207,10 @@ pub enum ErrorContext {
         /// The context of the error returned from the message's `Protocol` implementation.
         source: Box<Self>,
     },
+    /// The error was produced by a sink returned from [`async_proto::websocket`](crate::websocket).
+    WebSocketSink,
+    /// The error was produced by a stream returned from [`async_proto::websocket`](crate::websocket).
+    WebSocketStream,
     /// The error was produced by the default implementation of a `Protocol` trait method.
     DefaultImpl,
     /// The error was produced by an automatically derived `Protocol` implementation.

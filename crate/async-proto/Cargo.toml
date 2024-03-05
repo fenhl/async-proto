@@ -13,7 +13,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-tokio-tungstenite = ["tungstenite", "futures"]
+tokio-tungstenite = ["dep:tokio-tungstenite", "tungstenite", "futures"]
 warp = ["dep:warp", "futures"]
 
 [dependencies]
@@ -22,7 +22,7 @@ thiserror = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.18.0"
+version = "=0.19.0"
 
 [dependencies.bytes]
 version = "1"
@@ -64,6 +64,11 @@ optional = true
 [dependencies.tokio]
 version = "1"
 features = ["io-util"]
+
+[dependencies.tokio-tungstenite]
+version = "0.20"
+optional = true
+features = ["rustls-tls-webpki-roots"]
 
 [dependencies.tungstenite]
 version = "0.20"
