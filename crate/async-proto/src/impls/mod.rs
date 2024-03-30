@@ -55,6 +55,7 @@ use {
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
 #[cfg(feature = "either")] mod either;
+#[cfg(feature = "enumset")] mod enumset;
 #[cfg(feature = "git2")] mod git2;
 #[cfg(feature = "noisy_float")] mod noisy_float;
 #[cfg(feature = "semver")] mod semver;

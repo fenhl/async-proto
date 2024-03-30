@@ -22,7 +22,7 @@ thiserror = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.19.2"
+version = "=0.19.3"
 
 [dependencies.bytes]
 version = "1"
@@ -38,6 +38,10 @@ version = "0.8"
 optional = true
 
 [dependencies.either]
+version = "1"
+optional = true
+
+[dependencies.enumset]
 version = "1"
 optional = true
 

@@ -554,7 +554,8 @@ impl Parse for ImplProtocolFor {
             } else if lookahead.peek(Token![type]) {
                 let _ = input.parse::<Token![type]>()?;
                 let path = Path::parse_mod_style(input)?;
-                let generics = input.parse()?;
+                let mut generics = input.parse::<Generics>()?;
+                generics.where_clause = input.parse()?;
                 let _ = input.parse::<Token![;]>()?;
                 (attrs, path, generics, None)
             } else {
