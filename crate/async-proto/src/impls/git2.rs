@@ -20,6 +20,7 @@ use {
 };
 
 /// A git object ID uses its native binary representation, a sequence of 20 bytes.
+#[cfg_attr(docsrs, doc(cfg(feature = "git2")))]
 impl Protocol for git2::Oid {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
