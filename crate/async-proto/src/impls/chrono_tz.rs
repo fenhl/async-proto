@@ -16,7 +16,7 @@ impl TryFrom<TzProxy> for chrono_tz::Tz {
     type Error = ReadErrorKind;
 
     fn try_from(TzProxy { name }: TzProxy) -> Result<Self, ReadErrorKind> {
-        name.parse().map_err(ReadErrorKind::Custom)
+        name.parse::<Self>().map_err(|e| ReadErrorKind::Custom(e.to_string()))
     }
 }
 
