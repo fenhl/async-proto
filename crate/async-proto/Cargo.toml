@@ -58,6 +58,10 @@ version = "0.18"
 default-features = false
 optional = true
 
+[dependencies.gix-hash]
+version = "0.14"
+optional = true
+
 [dependencies.noisy_float]
 version = "0.2"
 optional = true
