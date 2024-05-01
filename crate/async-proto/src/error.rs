@@ -22,6 +22,7 @@ pub enum ReadErrorKind {
     #[error("received an infinite or NaN number")]
     FloatNotFinite,
     #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
     /// Received a non-Binary WebSocket message (e.g. Text or Ping).
     #[error("unexpected type of WebSocket message")]
     MessageKind(tungstenite::Message),
@@ -40,14 +41,18 @@ pub enum ReadErrorKind {
     UnknownVariant64(u64),
     #[error("unknown enum variant: {0}")]
     UnknownVariant128(u128),
+    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
+    #[error("unexpected text message starting with {0:?} received from WebSocket")]
+    WebSocketTextMessage(Option<char>),
     #[error(transparent)] Io(#[from] io::Error),
+    #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
+    #[error(transparent)] ParseInt(#[from] std::num::ParseIntError),
     #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
     #[error(transparent)] Tungstenite(#[from] tungstenite::Error),
     #[error(transparent)] Utf8(#[from] std::string::FromUtf8Error),
-    #[cfg(feature = "warp")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] warp::Error),
 }
 
 impl From<Infallible> for ReadErrorKind {
@@ -87,15 +92,15 @@ impl From<ReadErrorKind> for io::Error {
             ReadErrorKind::Io(e) => e,
             #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadErrorKind::Tungstenite(e) => io::Error::new(io::ErrorKind::Other, e),
             ReadErrorKind::Utf8(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            #[cfg(feature = "warp")] ReadErrorKind::Warp(e) => io::Error::new(io::ErrorKind::Other, e),
             ReadErrorKind::EndOfStream => io::Error::new(io::ErrorKind::UnexpectedEof, e),
+            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadErrorKind::WebSocketTextMessage(None) => io::Error::new(io::ErrorKind::UnexpectedEof, e),
             ReadErrorKind::FloatNotFinite |
             ReadErrorKind::UnknownVariant8(_) |
             ReadErrorKind::UnknownVariant16(_) |
             ReadErrorKind::UnknownVariant32(_) |
             ReadErrorKind::UnknownVariant64(_) |
             ReadErrorKind::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
-            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadErrorKind::MessageKind(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] ReadErrorKind::MessageKind(_) | ReadErrorKind::ParseInt(_) | ReadErrorKind::WebSocketTextMessage(Some(_)) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
             ReadErrorKind::TryReserve(_) => io::Error::new(io::ErrorKind::OutOfMemory, e),
             ReadErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
@@ -133,9 +138,6 @@ pub enum WriteErrorKind {
     #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))))]
     #[error(transparent)] Tungstenite(#[from] tungstenite::Error),
-    #[cfg(feature = "warp")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    #[error(transparent)] Warp(#[from] warp::Error),
 }
 
 impl From<Infallible> for WriteErrorKind {
@@ -168,7 +170,6 @@ impl From<WriteErrorKind> for io::Error {
             WriteErrorKind::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             WriteErrorKind::Io(e) => e,
             #[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] WriteErrorKind::Tungstenite(e) => io::Error::new(io::ErrorKind::Other, e),
-            #[cfg(feature = "warp")] WriteErrorKind::Warp(e) => io::Error::new(io::ErrorKind::Other, e),
             WriteErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
         }
     }

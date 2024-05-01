@@ -14,7 +14,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 tokio-tungstenite = ["dep:tokio-tungstenite", "tungstenite", "futures"]
-warp = ["dep:warp", "futures"]
 
 [dependencies]
 byteorder = "1"
@@ -22,7 +21,7 @@ thiserror = "1"
 
 [dependencies.async-proto-derive]
 path = "../async-proto-derive"
-version = "=0.20.0"
+version = "=0.21.0"
 
 [dependencies.bytes]
 version = "1"
@@ -89,8 +88,4 @@ optional = true
 
 [dependencies.uuid]
 version = "1"
-optional = true
-
-[dependencies.warp]
-version = "0.3"
 optional = true
