@@ -33,7 +33,7 @@ use {
     },
     fallible_collections::{
         FallibleBox,
-        FallibleVec as _,
+        FallibleVec,
     },
     tokio::io::{
         AsyncRead,
@@ -197,7 +197,7 @@ impl_protocol_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let mut vec = Vec::try_with_capacity(N).map_err(|e| ReadError {
+            let mut vec = <Vec<_> as FallibleVec<_>>::try_with_capacity(N).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "[T; N]" },
                 kind: e.into(),
             })?;
@@ -221,7 +221,7 @@ impl<T: Protocol + Send + Sync, const N: usize> Protocol for [T; N] {
     }
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let mut vec = Vec::try_with_capacity(N).map_err(|e| ReadError {
+        let mut vec = <Vec<_> as FallibleVec<_>>::try_with_capacity(N).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "[T; N]" },
             kind: e.into(),
         })?;
@@ -313,7 +313,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let len = u64::read(stream).await?;
-            let mut buf = Self::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
+            let mut buf = <Self as FallibleVec<_>>::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "Vec" },
                 kind: e.into(),
             })?).map_err(|e| ReadError {
@@ -342,7 +342,7 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
     fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
         let len = u64::read_sync(stream)?;
-        let mut buf = Self::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
+        let mut buf = <Self as FallibleVec<_>>::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "Vec" },
             kind: e.into(),
         })?).map_err(|e| ReadError {

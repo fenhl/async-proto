@@ -64,7 +64,7 @@ use {
         },
     },
 };
-#[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] use fallible_collections::FallibleVec as _;
+#[cfg(any(feature = "tokio-tungstenite", feature = "tungstenite"))] use fallible_collections::FallibleVec;
 pub use {
     async_proto_derive::{
         Protocol,
@@ -202,7 +202,7 @@ pub trait Protocol: Sized {
                             context: ErrorContext::DefaultImpl,
                             kind: e.into(),
                         })?;
-                        let mut buf = Vec::try_with_capacity(len).map_err(|e| ReadError {
+                        let mut buf = <Vec<_> as FallibleVec<_>>::try_with_capacity(len).map_err(|e| ReadError {
                             context: ErrorContext::DefaultImpl,
                             kind: e.into(),
                         })?;
@@ -302,7 +302,7 @@ pub trait Protocol: Sized {
                         context: ErrorContext::DefaultImpl,
                         kind: e.into(),
                     })?;
-                    let mut buf = Vec::try_with_capacity(len).map_err(|e| ReadError {
+                    let mut buf = <Vec<_> as FallibleVec<_>>::try_with_capacity(len).map_err(|e| ReadError {
                         context: ErrorContext::DefaultImpl,
                         kind: e.into(),
                     })?;
@@ -479,7 +479,7 @@ pub async fn websocket<R: Protocol, W: Protocol>(request: impl tungstenite::clie
                                     context: ErrorContext::DefaultImpl,
                                     kind: e.into(),
                                 })?;
-                                let buf = Vec::try_with_capacity(len).map_err(|e| ReadError {
+                                let buf = FallibleVec::try_with_capacity(len).map_err(|e| ReadError {
                                     context: ErrorContext::DefaultImpl,
                                     kind: e.into(),
                                 })?;
