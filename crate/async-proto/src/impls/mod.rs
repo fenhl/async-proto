@@ -61,6 +61,7 @@ use {
 #[cfg(feature = "noisy_float")] mod noisy_float;
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
+#[cfg(feature = "serenity")] mod serenity;
 #[cfg(feature = "uuid")] mod uuid;
 
 macro_rules! impl_protocol_primitive {
