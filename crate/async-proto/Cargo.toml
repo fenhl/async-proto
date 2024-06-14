@@ -16,7 +16,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 tokio-tungstenite = ["dep:tokio-tungstenite", "tungstenite", "futures"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.22.0" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.22.1" }
 byteorder = "1"
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
@@ -25,7 +25,7 @@ either = { version = "1", optional = true }
 enumset = { version = "1", optional = true }
 fallible_collections = { version = "0.4", features = ["rust_1_57"] }
 futures = { version = "0.3", optional = true }
-git2 = { version = "0.18", default-features = false, optional = true }
+git2 = { version = "0.19", default-features = false, optional = true }
 gix-hash = { version = "0.14", optional = true }
 noisy_float = { version = "0.2", optional = true }
 semver = { version = "1", optional = true }
