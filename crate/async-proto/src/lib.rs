@@ -231,9 +231,9 @@ pub trait Protocol: Sized {
                             kind,
                         })
                     }
-                    c => Err(ReadError {
+                    _ => Err(ReadError {
                         context: ErrorContext::DefaultImpl,
-                        kind: ReadErrorKind::WebSocketTextMessage(c),
+                        kind: ReadErrorKind::WebSocketTextMessage(data),
                     }),
                 },
                 tungstenite::Message::Binary(data) => Self::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
@@ -328,9 +328,9 @@ pub trait Protocol: Sized {
                         kind,
                     })
                 }
-                c => return Err(ReadError {
+                _ => return Err(ReadError {
                     context: ErrorContext::DefaultImpl,
-                    kind: ReadErrorKind::WebSocketTextMessage(c),
+                    kind: ReadErrorKind::WebSocketTextMessage(data),
                 }),
             },
             tungstenite::Message::Binary(data) => Self::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
@@ -487,9 +487,9 @@ pub async fn websocket<R: Protocol, W: Protocol>(request: impl tungstenite::clie
                                 *state = Some((len, buf));
                                 Either::Left(stream::empty())
                             }
-                            c => return Err(ReadError {
+                            _ => return Err(ReadError {
                                 context: ErrorContext::DefaultImpl,
-                                kind: ReadErrorKind::WebSocketTextMessage(c),
+                                kind: ReadErrorKind::WebSocketTextMessage(data),
                             }),
                         },
                         tungstenite::Message::Binary(data) => Either::Right(stream::once(future::ok(R::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {

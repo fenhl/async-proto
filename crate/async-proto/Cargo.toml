@@ -16,7 +16,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 tokio-tungstenite = ["dep:tokio-tungstenite", "tungstenite", "futures"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.22.1" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.23.0" }
 byteorder = "1"
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
