@@ -17,17 +17,17 @@ tokio-tungstenite021 = ["dep:tokio-tungstenite021", "futures"]
 tokio-tungstenite024 = ["dep:tokio-tungstenite024", "futures"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.24.0" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.24.1" }
 byteorder = "1"
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
-chrono-tz = { version = "0.9", optional = true }
+chrono-tz = { version = "0.10", optional = true }
 either = { version = "1", optional = true }
 enumset = { version = "1", optional = true }
 fallible_collections = { version = "0.4", features = ["rust_1_57"] }
 futures = { version = "0.3", optional = true }
 git2 = { version = "0.19", default-features = false, optional = true }
-gix-hash = { version = "0.14", optional = true }
+gix-hash = { version = "0.15", optional = true }
 noisy_float = { version = "0.2", optional = true }
 semver = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
