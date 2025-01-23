@@ -17,22 +17,22 @@ tokio-tungstenite021 = ["dep:tokio-tungstenite021", "futures"]
 tokio-tungstenite024 = ["dep:tokio-tungstenite024", "futures"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.24.1" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.24.2" }
 byteorder = "1"
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
 chrono-tz = { version = "0.10", optional = true }
 either = { version = "1", optional = true }
 enumset = { version = "1", optional = true }
-fallible_collections = { version = "0.4", features = ["rust_1_57"] }
+fallible_collections = { version = "0.5", features = ["rust_1_57"] }
 futures = { version = "0.3", optional = true }
-git2 = { version = "0.19", default-features = false, optional = true }
-gix-hash = { version = "0.15", optional = true }
+git2 = { version = "0.20", default-features = false, optional = true }
+gix-hash = { version = "0.16", optional = true }
 noisy_float = { version = "0.2", optional = true }
 semver = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 serenity = { version = "0.12.1", default-features = false, optional = true }
-thiserror = "1"
+thiserror = "2"
 tokio = { version = "1", features = ["io-util"] }
 tokio-tungstenite021 = { package = "tokio-tungstenite", version = "0.21", optional = true, features = ["rustls-tls-webpki-roots"] }
 tokio-tungstenite024 = { package = "tokio-tungstenite", version = "0.24", optional = true, features = ["rustls-tls-webpki-roots"] }
