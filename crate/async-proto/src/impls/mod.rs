@@ -54,11 +54,13 @@ use {
 #[cfg(feature = "bytes")] mod bytes;
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
+#[cfg(feature = "doubloon")] mod doubloon;
 #[cfg(feature = "either")] mod either;
 #[cfg(feature = "enumset")] mod enumset;
 #[cfg(feature = "git2")] mod git2;
 #[cfg(feature = "gix-hash")] mod gix_hash;
 #[cfg(feature = "noisy_float")] mod noisy_float;
+#[cfg(feature = "rust_decimal")] mod rust_decimal;
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
 #[cfg(feature = "serenity")] mod serenity;
