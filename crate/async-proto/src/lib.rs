@@ -661,7 +661,7 @@ pub async fn websocket021<R: Protocol, W: Protocol>(request: impl tungstenite021
         }),
         */
         stream.scan(None, |state, res| {
-            fn scanner<R: Protocol>(state: &mut Option<(usize, Vec<u8>)>, res: tungstenite021::Result<tungstenite021::Message>) -> Result<impl Stream<Item = Result<R, ReadError>>, ReadError> {
+            fn scanner<R: Protocol>(state: &mut Option<(usize, Vec<u8>)>, res: tungstenite021::Result<tungstenite021::Message>) -> Result<impl Stream<Item = Result<R, ReadError>> + use<R>, ReadError> {
                 let packet = res.map_err(|e| ReadError {
                     context: ErrorContext::WebSocketStream,
                     kind: e.into(),
@@ -778,7 +778,7 @@ pub async fn websocket024<R: Protocol, W: Protocol>(request: impl tungstenite024
         }),
         */
         stream.scan(None, |state, res| {
-            fn scanner<R: Protocol>(state: &mut Option<(usize, Vec<u8>)>, res: tungstenite024::Result<tungstenite024::Message>) -> Result<impl Stream<Item = Result<R, ReadError>>, ReadError> {
+            fn scanner<R: Protocol>(state: &mut Option<(usize, Vec<u8>)>, res: tungstenite024::Result<tungstenite024::Message>) -> Result<impl Stream<Item = Result<R, ReadError>> + use<R>, ReadError> {
                 let packet = res.map_err(|e| ReadError {
                     context: ErrorContext::WebSocketStream,
                     kind: e.into(),

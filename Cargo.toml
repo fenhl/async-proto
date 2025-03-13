@@ -6,4 +6,4 @@ resolver = "2"
 [workspace.package]
 version = "0.24.2"
 authors = ["Fenhl <fenhl@fenhl.net>"]
-edition = "2021"
+edition = "2024"
