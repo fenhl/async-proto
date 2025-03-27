@@ -13,12 +13,13 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-tokio-tungstenite021 = ["dep:tokio-tungstenite021", "futures"]
-tokio-tungstenite024 = ["dep:tokio-tungstenite024", "futures"]
+tokio-tungstenite021 = ["dep:tokio-tungstenite021", "dep:futures"]
+tokio-tungstenite024 = ["dep:tokio-tungstenite024", "dep:futures"]
+tokio-tungstenite026 = ["dep:tokio-tungstenite026", "dep:futures"]
 doubloon = ["dep:doubloon", "rust_decimal"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.24.3" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.25.0" }
 byteorder = "1"
 bytes = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, optional = true }
@@ -39,4 +40,5 @@ thiserror = "2"
 tokio = { version = "1", features = ["io-util"] }
 tokio-tungstenite021 = { package = "tokio-tungstenite", version = "0.21", optional = true, features = ["rustls-tls-webpki-roots"] }
 tokio-tungstenite024 = { package = "tokio-tungstenite", version = "0.24", optional = true, features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite026 = { package = "tokio-tungstenite", version = "0.26", optional = true, features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1", optional = true }

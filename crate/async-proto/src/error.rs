@@ -5,6 +5,7 @@ use std::{
 };
 #[cfg(feature = "tokio-tungstenite021")] use tokio_tungstenite021::tungstenite as tungstenite021;
 #[cfg(feature = "tokio-tungstenite024")] use tokio_tungstenite024::tungstenite as tungstenite024;
+#[cfg(feature = "tokio-tungstenite026")] use tokio_tungstenite026::tungstenite as tungstenite026;
 
 /// Specifies what went wrong while reading (receiving) a value.
 #[derive(Debug, thiserror::Error)]
@@ -25,14 +26,19 @@ pub enum ReadErrorKind {
     FloatNotFinite,
     #[cfg(feature = "tokio-tungstenite021")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
-    /// Received a non-Binary WebSocket message (e.g. Text or Ping).
+    /// Received a non-`Binary` WebSocket message (e.g. `Text` or `Ping`).
     #[error("unexpected type of WebSocket message")]
     MessageKind021(tungstenite021::Message),
     #[cfg(feature = "tokio-tungstenite024")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite024")))]
-    /// Received a non-Binary WebSocket message (e.g. Text or Ping).
+    /// Received a non-`Binary` WebSocket message (e.g. `Text` or `Ping`).
     #[error("unexpected type of WebSocket message")]
     MessageKind024(tungstenite024::Message),
+    #[cfg(feature = "tokio-tungstenite026")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite026")))]
+    /// Received a non-`Binary` WebSocket message (e.g. `Text` or `Ping`).
+    #[error("unexpected type of WebSocket message")]
+    MessageKind026(tungstenite026::Message),
     /// Attempted to read an empty type
     #[error("attempted to read an empty type")]
     ReadNever,
@@ -51,10 +57,14 @@ pub enum ReadErrorKind {
     #[cfg(any(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024")))]
     #[cfg_attr(docsrs, doc(cfg(any(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024")))))]
     #[error("unexpected text message received from WebSocket: {0}")]
-    WebSocketTextMessage(String),
+    WebSocketTextMessage024(String),
+    #[cfg(any(feature = "tokio-tungstenite026"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite026"))))]
+    #[error("unexpected text message received from WebSocket: {0}")]
+    WebSocketTextMessage026(tungstenite026::Utf8Bytes),
     #[error(transparent)] Io(#[from] io::Error),
-    #[cfg(any(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024")))]
-    #[cfg_attr(docsrs, doc(cfg(any(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024")))))]
+    #[cfg(any(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite026")))]
+    #[cfg_attr(docsrs, doc(cfg(any(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite026")))))]
     #[error(transparent)] ParseInt(#[from] std::num::ParseIntError),
     #[cfg(any(feature = "tokio-tungstenite021"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite021"))))]
@@ -62,6 +72,9 @@ pub enum ReadErrorKind {
     #[cfg(any(feature = "tokio-tungstenite024"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite024"))))]
     #[error(transparent)] Tungstenite024(#[from] tungstenite024::Error),
+    #[cfg(any(feature = "tokio-tungstenite026"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite026"))))]
+    #[error(transparent)] Tungstenite026(#[from] tungstenite026::Error),
     #[error(transparent)] Utf8(#[from] std::string::FromUtf8Error),
 }
 
@@ -102,9 +115,11 @@ impl From<ReadErrorKind> for io::Error {
             ReadErrorKind::Io(e) => e,
             #[cfg(feature = "tokio-tungstenite021")] ReadErrorKind::Tungstenite021(e) => io::Error::new(io::ErrorKind::Other, e),
             #[cfg(feature = "tokio-tungstenite024")] ReadErrorKind::Tungstenite024(e) => io::Error::new(io::ErrorKind::Other, e),
+            #[cfg(feature = "tokio-tungstenite026")] ReadErrorKind::Tungstenite026(e) => io::Error::new(io::ErrorKind::Other, e),
             ReadErrorKind::Utf8(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::EndOfStream => io::Error::new(io::ErrorKind::UnexpectedEof, e),
-            #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024"))] ReadErrorKind::WebSocketTextMessage(ref msg) if msg.is_empty() => io::Error::new(io::ErrorKind::UnexpectedEof, e),
+            #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024"))] ReadErrorKind::WebSocketTextMessage024(ref msg) => io::Error::new(if msg.is_empty() { io::ErrorKind::UnexpectedEof } else { io::ErrorKind::InvalidData }, e),
+            #[cfg(feature = "tokio-tungstenite026")] ReadErrorKind::WebSocketTextMessage026(ref msg) => io::Error::new(if msg.is_empty() { io::ErrorKind::UnexpectedEof } else { io::ErrorKind::InvalidData }, e),
             ReadErrorKind::FloatNotFinite |
             ReadErrorKind::UnknownVariant8(_) |
             ReadErrorKind::UnknownVariant16(_) |
@@ -113,7 +128,8 @@ impl From<ReadErrorKind> for io::Error {
             ReadErrorKind::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             #[cfg(feature = "tokio-tungstenite021")] ReadErrorKind::MessageKind021(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             #[cfg(feature = "tokio-tungstenite024")] ReadErrorKind::MessageKind024(_) => io::Error::new(io::ErrorKind::InvalidData, e),
-            #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024"))] ReadErrorKind::ParseInt(_) | ReadErrorKind::WebSocketTextMessage(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(feature = "tokio-tungstenite026")] ReadErrorKind::MessageKind026(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite026"))] ReadErrorKind::ParseInt(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
             ReadErrorKind::TryReserve(_) => io::Error::new(io::ErrorKind::OutOfMemory, e),
             ReadErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
@@ -154,6 +170,9 @@ pub enum WriteErrorKind {
     #[cfg(feature = "tokio-tungstenite024")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite024")))]
     #[error(transparent)] Tungstenite024(#[from] tungstenite024::Error),
+    #[cfg(feature = "tokio-tungstenite026")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite026")))]
+    #[error(transparent)] Tungstenite026(#[from] tungstenite026::Error),
 }
 
 impl From<Infallible> for WriteErrorKind {
@@ -187,6 +206,7 @@ impl From<WriteErrorKind> for io::Error {
             WriteErrorKind::Io(e) => e,
             #[cfg(feature = "tokio-tungstenite021")] WriteErrorKind::Tungstenite021(e) => io::Error::new(io::ErrorKind::Other, e),
             #[cfg(feature = "tokio-tungstenite024")] WriteErrorKind::Tungstenite024(e) => io::Error::new(io::ErrorKind::Other, e),
+            #[cfg(feature = "tokio-tungstenite026")] WriteErrorKind::Tungstenite026(e) => io::Error::new(io::ErrorKind::Other, e),
             WriteErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
         }
     }
