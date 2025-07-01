@@ -193,7 +193,7 @@ pub trait Protocol: Sized {
     ///
     /// # Cancellation safety
     ///
-    /// The default implementation of this method is cancellation safe.
+    /// The default implementation of this method is not cancellation safe.
     fn read_ws021<'a, R: Stream<Item = Result<tungstenite021::Message, tungstenite021::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await.map_err(|e| ReadError {
@@ -263,7 +263,7 @@ pub trait Protocol: Sized {
     ///
     /// # Cancellation safety
     ///
-    /// The default implementation of this method is cancellation safe.
+    /// The default implementation of this method is not cancellation safe.
     fn read_ws024<'a, R: Stream<Item = Result<tungstenite024::Message, tungstenite024::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await.map_err(|e| ReadError {
@@ -333,7 +333,7 @@ pub trait Protocol: Sized {
     ///
     /// # Cancellation safety
     ///
-    /// The default implementation of this method is cancellation safe.
+    /// The default implementation of this method is not cancellation safe.
     fn read_ws026<'a, R: Stream<Item = Result<tungstenite026::Message, tungstenite026::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await.map_err(|e| ReadError {
