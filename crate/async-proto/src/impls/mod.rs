@@ -51,6 +51,7 @@ use {
     },
 };
 
+#[cfg(feature = "bitvec")] mod bitvec;
 #[cfg(feature = "bytes")] mod bytes;
 #[cfg(feature = "chrono")] mod chrono;
 #[cfg(feature = "chrono-tz")] mod chrono_tz;
