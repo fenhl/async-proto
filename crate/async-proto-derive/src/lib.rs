@@ -254,13 +254,25 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
         if internal && data.is_some() { return quote!(compile_error!("redundant type layout specification with #[async_proto(via = ...)]");).into() }
         let (write_proxy, write_sync_proxy) = if clone {
             (
-                quote!(<Self as ::core::convert::Into<#proxy_ty>>::into(<Self as ::core::clone::Clone>::clone(self))),
-                quote!(<Self as ::core::convert::Into<#proxy_ty>>::into(<Self as ::core::clone::Clone>::clone(self))),
+                quote!(<Self as ::core::convert::TryInto<#proxy_ty>>::try_into(<Self as ::core::clone::Clone>::clone(self)).map_err(|e| #async_proto_crate::WriteError {
+                    context: #async_proto_crate::ErrorContext::TryInto,
+                    kind: ::core::convert::Into::<#async_proto_crate::WriteErrorKind>::into(e),
+                })?),
+                quote!(<Self as ::core::convert::TryInto<#proxy_ty>>::try_into(<Self as ::core::clone::Clone>::clone(self)).map_err(|e| #async_proto_crate::WriteError {
+                    context: #async_proto_crate::ErrorContext::TryInto,
+                    kind: ::core::convert::Into::<#async_proto_crate::WriteErrorKind>::into(e),
+                })?),
             )
         } else {
             (
-                quote!(<&'a Self as ::core::convert::Into<#proxy_ty>>::into(self)),
-                quote!(<&Self as ::core::convert::Into<#proxy_ty>>::into(self)),
+                quote!(<&'a Self as ::core::convert::TryInto<#proxy_ty>>::try_into(self).map_err(|e| #async_proto_crate::WriteError {
+                    context: #async_proto_crate::ErrorContext::TryInto,
+                    kind: ::core::convert::Into::<#async_proto_crate::WriteErrorKind>::into(e),
+                })?),
+                quote!(<&Self as ::core::convert::TryInto<#proxy_ty>>::try_into(self).map_err(|e| #async_proto_crate::WriteError {
+                    context: #async_proto_crate::ErrorContext::TryInto,
+                    kind: ::core::convert::Into::<#async_proto_crate::WriteErrorKind>::into(e),
+                })?),
             )
         };
         let map_err = map_err.unwrap_or(parse_quote!(::core::convert::Into::<#async_proto_crate::ReadErrorKind>::into));
@@ -499,8 +511,8 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
 /// * `#[async_proto(as_string)]`: Implements `Protocol` for this type by converting from and to a string using the `FromStr` and `ToString` traits. The `FromStr` error type must implement `Into<ReadErrorKind>`.
 ///     * `#[async_proto(map_err = ...)]`: Removes the requirement for the `FromStr` error type to implement `Into<ReadErrorKind>` and instead uses the given expression (which should be an `FnOnce(<T as FromStr>::Err) -> ReadErrorKind`) to convert the error.
 /// * `#[async_proto(attr(...))]`: Adds the given attribute(s) to the `Protocol` implementation. For example, the implementation can be documented using `#[async_proto(attr(doc = "..."))]`. May be specified multiple times.
-/// * `#[async_proto(via = Proxy)]`: Implements `Protocol` for this type (let's call it `T`) in terms of another type (`Proxy` in this case) instead of using the variant- and field-based representation described above. `&'a T` must implement `Into<Proxy>` for all `'a`, and `Proxy` must implement `Protocol` and `TryInto<T>` with an `Error` type that implements `Into<ReadErrorKind>`.
-///     * `#[async_proto(clone)]`: Replaces the requirement for `&'a T` to implement `Into<Proxy>` with requirements for `T` to implement `Clone` and `Into<Proxy>`.
+/// * `#[async_proto(via = Proxy)]`: Implements `Protocol` for this type (let's call it `T`) in terms of another type (`Proxy` in this case) instead of using the variant- and field-based representation described above. `&'a T` must implement `TryInto<Proxy>` for all `'a`, with an `Error` type that implements `Into<WriteErrorKind>`, and `Proxy` must implement `Protocol` and `TryInto<T>`, with an `Error` type that implements `Into<ReadErrorKind>`.
+///     * `#[async_proto(clone)]`: Replaces the requirement for `&'a T` to implement `TryInto<Proxy>` with requirements for `T` to implement `Clone` and `TryInto<Proxy>`.
 ///     * `#[async_proto(map_err = ...)]`: Removes the requirement for `<Proxy as TryInto<T>>::Error` to implement `Into<ReadErrorKind>` and instead uses the given expression (which should be an `FnOnce(<Proxy as TryInto<T>>::Error) -> ReadErrorKind`) to convert the error.
 /// * `#[async_proto(where(...))]`: Overrides the bounds for the generated `Protocol` implementation. The default is to require `Protocol + Send + Sync + 'static` for each type parameter of this type.
 ///
