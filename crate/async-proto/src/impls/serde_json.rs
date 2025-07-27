@@ -11,6 +11,7 @@ use {
     async_proto_derive::impl_protocol_for,
     crate::{
         ErrorContext,
+        LengthPrefixed,
         Protocol,
         ReadError,
         ReadErrorKind,
@@ -21,12 +22,28 @@ use {
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 impl Protocol for serde_json::Map<String, serde_json::Value> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+impl LengthPrefixed for serde_json::Map<String, serde_json::Value> {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
-            let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
-                kind: e.into(),
-            })?); //TODO fallible allocation?
+            let len = super::read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "serde_json::Map" }).await?;
+            let mut map = Self::with_capacity(len); //TODO fallible allocation?
             for _ in 0..len {
                 map.insert(String::read(stream).await?, serde_json::Value::read(stream).await?);
             }
@@ -34,12 +51,9 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            super::write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "serde_json::Map" }).await?;
             for (k, v) in self {
                 k.write(sink).await?;
                 v.write(sink).await?;
@@ -48,23 +62,17 @@ impl Protocol for serde_json::Map<String, serde_json::Value> {
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
-        let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
-            kind: e.into(),
-        })?); //TODO fallible allocation?
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = super::read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "serde_json::Map" })?;
+        let mut map = Self::with_capacity(len); //TODO fallible allocation?
         for _ in 0..len {
             map.insert(String::read_sync(stream)?, serde_json::Value::read_sync(stream)?);
         }
         Ok(map)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "serde_json::Map" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        super::write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "serde_json::Map" })?;
         for (k, v) in self {
             k.write_sync(sink)?;
             v.write_sync(sink)?;

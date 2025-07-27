@@ -44,10 +44,12 @@ use {
     async_proto_derive::impl_protocol_for,
     crate::{
         ErrorContext,
+        LengthPrefixed,
         Protocol,
         ReadError,
         ReadErrorKind,
         WriteError,
+        WriteErrorKind,
     },
 };
 
@@ -66,6 +68,90 @@ use {
 #[cfg(feature = "serde_json")] mod serde_json;
 #[cfg(feature = "serenity")] mod serenity;
 #[cfg(feature = "uuid")] mod uuid;
+
+async fn read_len<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64, error_ctx: impl Fn() -> ErrorContext) -> Result<usize, ReadError> {
+    let len = match max_len {
+        0 => 0,
+        1..=255 => u8::read(stream).await?.into(),
+        256..=65_535 => u16::read(stream).await?.into(),
+        65_536..=4_294_967_295 => u32::read(stream).await?.into(),
+        _ => u64::read(stream).await?,
+    };
+    if len > max_len {
+        Err(ReadError {
+            context: error_ctx(),
+            kind: ReadErrorKind::MaxLen { len, max_len },
+        })
+    } else {
+        usize::try_from(len).map_err(|e| ReadError {
+            context: error_ctx(),
+            kind: e.into(),
+        })
+    }
+}
+
+async fn write_len<'a, W: AsyncWrite + Unpin + Send + 'a>(sink: &'a mut W, len: usize, max_len: u64, error_ctx: impl Fn() -> ErrorContext) -> Result<(), WriteError> {
+    let len = u64::try_from(len).map_err(|e| WriteError {
+        context: error_ctx(),
+        kind: e.into(),
+    })?;
+    if len > max_len {
+        return Err(WriteError {
+            context: error_ctx(),
+            kind: WriteErrorKind::MaxLen { len, max_len },
+        })
+    }
+    match max_len {
+        0 => {}
+        1..=255 => (len as u8).write(sink).await?,
+        256..=65_535 => (len as u16).write(sink).await?,
+        65_536..=4_294_967_295 => (len as u32).write(sink).await?,
+        _ => len.write(sink).await?,
+    }
+    Ok(())
+}
+
+fn read_len_sync(stream: &mut impl Read, max_len: u64, error_ctx: impl Fn() -> ErrorContext) -> Result<usize, ReadError> {
+    let len = match max_len {
+        0 => 0,
+        1..=255 => u8::read_sync(stream)?.into(),
+        256..=65_535 => u16::read_sync(stream)?.into(),
+        65_536..=4_294_967_295 => u32::read_sync(stream)?.into(),
+        _ => u64::read_sync(stream)?,
+    };
+    if len > max_len {
+        Err(ReadError {
+            context: error_ctx(),
+            kind: ReadErrorKind::MaxLen { len, max_len },
+        })
+    } else {
+        usize::try_from(len).map_err(|e| ReadError {
+            context: error_ctx(),
+            kind: e.into(),
+        })
+    }
+}
+
+fn write_len_sync(sink: &mut impl Write, len: usize, max_len: u64, error_ctx: impl Fn() -> ErrorContext) -> Result<(), WriteError> {
+    let len = u64::try_from(len).map_err(|e| WriteError {
+        context: error_ctx(),
+        kind: e.into(),
+    })?;
+    if len > max_len {
+        return Err(WriteError {
+            context: error_ctx(),
+            kind: WriteErrorKind::MaxLen { len, max_len },
+        })
+    }
+    match max_len {
+        0 => {}
+        1..=255 => (len as u8).write_sync(sink)?,
+        256..=65_535 => (len as u16).write_sync(sink)?,
+        65_536..=4_294_967_295 => (len as u32).write_sync(sink)?,
+        _ => len.write_sync(sink)?,
+    }
+    Ok(())
+}
 
 macro_rules! impl_protocol_primitive {
     ($ty:ty, $read:ident, $write:ident$(, $endian:ty)?) => {
@@ -314,13 +400,30 @@ impl<T: Protocol> Protocol for Box<T> {
 /// Note that due to Rust's lack of [specialization](https://github.com/rust-lang/rust/issues/31844), this implementation is inefficient for `Vec<u8>`.
 /// Prefer [`Bytes`](https://docs.rs/bytes/latest/bytes/struct.Bytes.html) if possible.
 impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+/// Note that due to Rust's lack of [specialization](https://github.com/rust-lang/rust/issues/31844), this implementation is inefficient for `Vec<u8>`.
+/// Prefer [`Bytes`](https://docs.rs/bytes/latest/bytes/struct.Bytes.html) if possible.
+impl<T: Protocol + Send + Sync> LengthPrefixed for Vec<T> {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
-            let mut buf = <Self as FallibleVec<_>>::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "Vec" },
-                kind: e.into(),
-            })?).map_err(|e| ReadError {
+            let len = read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "Vec" }).await?;
+            let mut buf = <Self as FallibleVec<_>>::try_with_capacity(len).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "Vec" },
                 kind: e.into(),
             })?;
@@ -331,12 +434,9 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "Vec" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "Vec" }).await?;
             for elt in self {
                 elt.write(sink).await?;
             }
@@ -344,12 +444,9 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
-        let mut buf = <Self as FallibleVec<_>>::try_with_capacity(usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "Vec" },
-            kind: e.into(),
-        })?).map_err(|e| ReadError {
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "Vec" })?;
+        let mut buf = <Self as FallibleVec<_>>::try_with_capacity(len).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "Vec" },
             kind: e.into(),
         })?;
@@ -359,11 +456,8 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
         Ok(buf)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "Vec" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "Vec" })?;
         for elt in self {
             elt.write_sync(sink)?;
         }
@@ -373,13 +467,27 @@ impl<T: Protocol + Send + Sync> Protocol for Vec<T> {
 
 /// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
-    fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+impl<T: Protocol + Ord + Send + Sync + 'static> LengthPrefixed for BTreeSet<T> {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
-            usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
-                kind: e.into(),
-            })?; // error here rather than panicking in the insert loop
+            let len = read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "BTreeSet" }).await?;
             let mut set = Self::default();
             for _ in 0..len {
                 set.insert(T::read(stream).await?); //TODO use fallible allocation once available
@@ -388,12 +496,9 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "BTreeSet" }).await?;
             for elt in self {
                 elt.write(sink).await?;
             }
@@ -401,24 +506,16 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
-        usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
-            kind: e.into(),
-        })?; // error here rather than panicking in the insert loop
-        let mut set = Self::default();
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "BTreeSet" })?;        let mut set = Self::default();
         for _ in 0..len {
             set.insert(T::read_sync(stream)?); //TODO use fallible allocation once available
         }
         Ok(set)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "BTreeSet" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "BTreeSet" })?;
         for elt in self {
             elt.write_sync(sink)?;
         }
@@ -426,15 +523,29 @@ impl<T: Protocol + Ord + Send + Sync + 'static> Protocol for BTreeSet<T> {
     }
 }
 
-/// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+impl<T: Protocol + Eq + Hash + Send + Sync> LengthPrefixed for HashSet<T> {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
-            let mut set = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "HashSet" },
-                kind: e.into(),
-            })?); //TODO use fallible allocation once available
+            let len = read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "HashSet" }).await?;
+            let mut set = Self::with_capacity(len); //TODO use fallible allocation once available
             for _ in 0..len {
                 set.insert(T::read(stream).await?);
             }
@@ -442,12 +553,9 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "HashSet" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "HashSet" }).await?;
             for elt in self {
                 elt.write(sink).await?;
             }
@@ -455,23 +563,17 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
-        let mut set = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "HashSet" },
-            kind: e.into(),
-        })?); //TODO use fallible allocation once available
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "HashSet" })?;
+        let mut set = Self::with_capacity(len); //TODO use fallible allocation once available
         for _ in 0..len {
             set.insert(T::read_sync(stream)?);
         }
         Ok(set)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "HashSet" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "HashSet" })?;
         for elt in self {
             elt.write_sync(sink)?;
         }
@@ -482,13 +584,29 @@ impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
 /// A string is encoded in UTF-8 and prefixed with the length in bytes as a [`u64`].
 impl Protocol for String {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+/// A string is encoded in UTF-8 and prefixed with the length in bytes.
+impl LengthPrefixed for String {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
+            let len = read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "String" }).await?;
             let mut buf = Vec::default();
-            buf.try_resize(usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "String" },
-                kind: e.into(),
-            })?, 0).map_err(|e| ReadError {
+            buf.try_resize(len, 0).map_err(|e| ReadError {
                 context: ErrorContext::BuiltIn { for_type: "String" },
                 kind: e.into(),
             })?;
@@ -503,12 +621,9 @@ impl Protocol for String {
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "String" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "String" }).await?;
             sink.write(self.as_bytes()).await.map_err(|e| WriteError {
                 context: ErrorContext::BuiltIn { for_type: "String" },
                 kind: e.into(),
@@ -517,13 +632,10 @@ impl Protocol for String {
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "String" })?;
         let mut buf = Vec::default();
-        buf.try_resize(usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "String" },
-            kind: e.into(),
-        })?, 0).map_err(|e| ReadError {
+        buf.try_resize(len, 0).map_err(|e| ReadError {
             context: ErrorContext::BuiltIn { for_type: "String" },
             kind: e.into(),
         })?;
@@ -537,11 +649,8 @@ impl Protocol for String {
         })?)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "String" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "String" })?;
         sink.write(self.as_bytes()).map_err(|e| WriteError {
             context: ErrorContext::BuiltIn { for_type: "String" },
             kind: e.into(),
@@ -550,15 +659,28 @@ impl Protocol for String {
     }
 }
 
-/// A map is prefixed with the length as a [`u64`].
 impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'static> Protocol for BTreeMap<K, V> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'static> LengthPrefixed for BTreeMap<K, V> {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
-            usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
-                kind: e.into(),
-            })?; // error here rather than panicking in the insert loop
+            let len = read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "BTreeMap" }).await?;
             let mut map = Self::default();
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?); //TODO use fallible allocation once available
@@ -567,12 +689,9 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "BTreeMap" }).await?;
             for (k, v) in self {
                 k.write(sink).await?;
                 v.write(sink).await?;
@@ -581,12 +700,8 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
-        usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
-            kind: e.into(),
-        })?; // error here rather than panicking in the insert loop
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "BTreeMap" })?;
         let mut map = Self::default();
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?); //TODO use fallible allocation once available
@@ -594,11 +709,8 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
         Ok(map)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "BTreeMap" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "BTreeMap" })?;
         for (k, v) in self {
             k.write_sync(sink)?;
             v.write_sync(sink)?;
@@ -610,12 +722,27 @@ impl<K: Protocol + Ord + Send + Sync + 'static, V: Protocol + Send + Sync + 'sta
 /// A map is prefixed with the length as a [`u64`].
 impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol for HashMap<K, V> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Self::read_length_prefixed(stream, u64::MAX)
+    }
+
+    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        self.write_length_prefixed(sink, u64::MAX)
+    }
+
+    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
+        Self::read_length_prefixed_sync(stream, u64::MAX)
+    }
+
+    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
+        self.write_length_prefixed_sync(sink, u64::MAX)
+    }
+}
+
+impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> LengthPrefixed for HashMap<K, V> {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
-            let len = u64::read(stream).await?;
-            let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
-                context: ErrorContext::BuiltIn { for_type: "HashMap" },
-                kind: e.into(),
-            })?); //TODO use fallible allocation once available
+            let len = read_len(stream, max_len, || ErrorContext::BuiltIn { for_type: "HashMap" }).await?;
+            let mut map = Self::with_capacity(len); //TODO use fallible allocation once available
             for _ in 0..len {
                 map.insert(K::read(stream).await?, V::read(stream).await?);
             }
@@ -623,12 +750,9 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
         })
     }
 
-    fn write<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
         Box::pin(async move {
-            u64::try_from(self.len()).map_err(|e| WriteError {
-                context: ErrorContext::BuiltIn { for_type: "HashMap" },
-                kind: e.into(),
-            })?.write(sink).await?;
+            write_len(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "HashMap" }).await?;
             for (k, v) in self {
                 k.write(sink).await?;
                 v.write(sink).await?;
@@ -637,23 +761,17 @@ impl<K: Protocol + Eq + Hash + Send + Sync, V: Protocol + Send + Sync> Protocol 
         })
     }
 
-    fn read_sync(stream: &mut impl Read) -> Result<Self, ReadError> {
-        let len = u64::read_sync(stream)?;
-        let mut map = Self::with_capacity(usize::try_from(len).map_err(|e| ReadError {
-            context: ErrorContext::BuiltIn { for_type: "HashMap" },
-            kind: e.into(),
-        })?); //TODO use fallible allocation once available
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        let len = read_len_sync(stream, max_len, || ErrorContext::BuiltIn { for_type: "HashMap" })?;
+        let mut map = Self::with_capacity(len); //TODO use fallible allocation once available
         for _ in 0..len {
             map.insert(K::read_sync(stream)?, V::read_sync(stream)?);
         }
         Ok(map)
     }
 
-    fn write_sync(&self, sink: &mut impl Write) -> Result<(), WriteError> {
-        u64::try_from(self.len()).map_err(|e| WriteError {
-            context: ErrorContext::BuiltIn { for_type: "HashMap" },
-            kind: e.into(),
-        })?.write_sync(sink)?;
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        write_len_sync(sink, self.len(), max_len, || ErrorContext::BuiltIn { for_type: "HashMap" })?;
         for (k, v) in self {
             k.write_sync(sink)?;
             v.write_sync(sink)?;
@@ -691,6 +809,40 @@ where B::Owned: Protocol + Send + Sync {
         match self {
             Self::Borrowed(borrowed) => (*borrowed).to_owned().write_sync(sink)?,
             Self::Owned(owned) => owned.write_sync(sink)?,
+        }
+        Ok(())
+    }
+}
+
+/// A cow is represented like its owned variant.
+///
+/// Note that due to a restriction in the type system, writing a borrowed cow requires cloning it.
+impl<'cow, B: ToOwned + Sync + ?Sized> LengthPrefixed for std::borrow::Cow<'cow, B>
+where B::Owned: LengthPrefixed + Send + Sync {
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(Self::Owned(B::Owned::read_length_prefixed(stream, max_len).await?))
+        })
+    }
+
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>> {
+        Box::pin(async move {
+            match self {
+                Self::Borrowed(borrowed) => (*borrowed).to_owned().write_length_prefixed(sink, max_len).await?,
+                Self::Owned(owned) => owned.write_length_prefixed(sink, max_len).await?,
+            }
+            Ok(())
+        })
+    }
+
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError> {
+        Ok(Self::Owned(B::Owned::read_length_prefixed_sync(stream, max_len)?))
+    }
+
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError> {
+        match self {
+            Self::Borrowed(borrowed) => (*borrowed).to_owned().write_length_prefixed_sync(sink, max_len)?,
+            Self::Owned(owned) => owned.write_length_prefixed_sync(sink, max_len)?,
         }
         Ok(())
     }

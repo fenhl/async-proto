@@ -35,24 +35,72 @@ fn read_fields(internal: bool, sync: bool, fields: &Fields) -> proc_macro2::Toke
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
             let read_fields = unnamed.iter()
                 .enumerate()
-                .map(|(idx, Field { ty, .. })| quote_spanned! {ty.span()=>
-                    <#ty as #async_proto_crate::Protocol>#read.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
-                        context: #async_proto_crate::ErrorContext::UnnamedField {
-                            idx: #idx,
-                            source: Box::new(context),
-                        },
-                        kind,
-                    })?
+                .map(|(idx, Field { attrs, ty, .. })| {
+                    let mut max_len = None;
+                    for attr in attrs.into_iter().filter(|attr| attr.path().is_ident("async_proto")) {
+                        match attr.parse_args_with(Punctuated::<FieldAttr, Token![,]>::parse_terminated) {
+                            Ok(attrs) => for attr in attrs {
+                                match attr {
+                                    FieldAttr::MaxLen(new_max_len) => if max_len.replace(new_max_len).is_some() {
+                                        return quote!(compile_error!("#[async_proto(max_len = ...)] specified multiple times");).into()
+                                    },
+                                }
+                            },
+                            Err(e) => return e.to_compile_error().into(),
+                        }
+                    }
+                    let read = if let Some(max_len) = max_len {
+                        let read = if sync { quote!(::read_length_prefixed_sync(stream, #max_len)) } else { quote!(::read_length_prefixed(stream, #max_len).await) };
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::LengthPrefixed>#read
+                        }
+                    } else {
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::Protocol>#read
+                        }
+                    };
+                    quote_spanned! {ty.span()=>
+                        #read.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                            context: #async_proto_crate::ErrorContext::UnnamedField {
+                                idx: #idx,
+                                source: Box::new(context),
+                            },
+                            kind,
+                        })?
+                    }
                 })
                 .collect_vec();
             quote!((#(#read_fields,)*))
         }
         Fields::Named(FieldsNamed { named, .. }) => {
             let read_fields = named.iter()
-                .map(|Field { ident, ty, .. }| {
+                .map(|Field { attrs, ident, ty, .. }| {
+                    let mut max_len = None;
+                    for attr in attrs.into_iter().filter(|attr| attr.path().is_ident("async_proto")) {
+                        match attr.parse_args_with(Punctuated::<FieldAttr, Token![,]>::parse_terminated) {
+                            Ok(attrs) => for attr in attrs {
+                                match attr {
+                                    FieldAttr::MaxLen(new_max_len) => if max_len.replace(new_max_len).is_some() {
+                                        return quote!(compile_error!("#[async_proto(max_len = ...)] specified multiple times");).into()
+                                    },
+                                }
+                            },
+                            Err(e) => return e.to_compile_error().into(),
+                        }
+                    }
                     let name = ident.as_ref().expect("FieldsNamed with unnamed field").to_string();
+                    let read = if let Some(max_len) = max_len {
+                        let read = if sync { quote!(::read_length_prefixed_sync(stream, #max_len)) } else { quote!(::read_length_prefixed(stream, #max_len).await) };
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::LengthPrefixed>#read
+                        }
+                    } else {
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::Protocol>#read
+                        }
+                    };
                     quote_spanned! {ty.span()=>
-                        #ident: <#ty as #async_proto_crate::Protocol>#read.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
+                        #ident: #read.map_err(|#async_proto_crate::ReadError { context, kind }| #async_proto_crate::ReadError {
                             context: #async_proto_crate::ErrorContext::NamedField {
                                 name: #name,
                                 source: Box::new(context),
@@ -88,33 +136,76 @@ fn fields_pat(fields: &Fields) -> proc_macro2::TokenStream {
 
 fn write_fields(internal: bool, sync: bool, fields: &Fields) -> proc_macro2::TokenStream {
     let async_proto_crate = if internal { quote!(crate) } else { quote!(::async_proto) };
-    let write = if sync { quote!(.write_sync(sink)) } else { quote!(.write(sink).await) };
     match fields {
         Fields::Unit => quote!(),
         Fields::Unnamed(FieldsUnnamed { unnamed, .. }) => {
-            let field_idents = unnamed.iter()
+            let write_fields = unnamed.iter()
                 .enumerate()
-                .map(|(idx, _)| Ident::new(&format!("__field{}", idx), Span::call_site()))
-                .collect_vec();
-            let write_fields = field_idents.iter()
-                .enumerate()
-                .map(|(idx, ident)| quote!(#ident #write.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
-                    context: #async_proto_crate::ErrorContext::UnnamedField {
-                        idx: #idx,
-                        source: Box::new(context),
-                    },
-                    kind,
-                })?;));
+                .map(|(idx, Field { attrs, ty, .. })| {
+                    let mut max_len = None;
+                    for attr in attrs.into_iter().filter(|attr| attr.path().is_ident("async_proto")) {
+                        match attr.parse_args_with(Punctuated::<FieldAttr, Token![,]>::parse_terminated) {
+                            Ok(attrs) => for attr in attrs {
+                                match attr {
+                                    FieldAttr::MaxLen(new_max_len) => if max_len.replace(new_max_len).is_some() {
+                                        return quote!(compile_error!("#[async_proto(max_len = ...)] specified multiple times");).into()
+                                    },
+                                }
+                            },
+                            Err(e) => return e.to_compile_error().into(),
+                        }
+                    }
+                    let ident = Ident::new(&format!("__field{}", idx), Span::call_site());
+                    let write = if let Some(max_len) = max_len {
+                        let write = if sync { quote!(::write_length_prefixed_sync(#ident, sink, #max_len)) } else { quote!(::write_length_prefixed(#ident, sink, #max_len).await) };
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::LengthPrefixed>#write
+                        }
+                    } else {
+                        let write = if sync { quote!(::write_sync(#ident, sink)) } else { quote!(::write(#ident, sink).await) };
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::Protocol>#write
+                        }
+                    };
+                    quote!(#write.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                        context: #async_proto_crate::ErrorContext::UnnamedField {
+                            idx: #idx,
+                            source: Box::new(context),
+                        },
+                        kind,
+                    })?;)
+                });
             quote!(#(#write_fields)*)
         }
         Fields::Named(FieldsNamed { named, .. }) => {
-            let field_idents = named.iter()
-                .map(|Field { ident, .. }| ident)
-                .collect_vec();
-            let write_fields = field_idents.iter()
-                .map(|ident| {
+            let write_fields = named.iter()
+                .map(|Field { attrs, ident, ty, .. }| {
+                    let mut max_len = None;
+                    for attr in attrs.into_iter().filter(|attr| attr.path().is_ident("async_proto")) {
+                        match attr.parse_args_with(Punctuated::<FieldAttr, Token![,]>::parse_terminated) {
+                            Ok(attrs) => for attr in attrs {
+                                match attr {
+                                    FieldAttr::MaxLen(new_max_len) => if max_len.replace(new_max_len).is_some() {
+                                        return quote!(compile_error!("#[async_proto(max_len = ...)] specified multiple times");).into()
+                                    },
+                                }
+                            },
+                            Err(e) => return e.to_compile_error().into(),
+                        }
+                    }
+                    let write = if let Some(max_len) = max_len {
+                        let write = if sync { quote!(::write_length_prefixed_sync(#ident, sink, #max_len)) } else { quote!(::write_length_prefixed(#ident, sink, #max_len).await) };
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::LengthPrefixed>#write
+                        }
+                    } else {
+                        let write = if sync { quote!(::write_sync(#ident, sink)) } else { quote!(::write(#ident, sink).await) };
+                        quote_spanned! {ty.span()=>
+                            <#ty as #async_proto_crate::Protocol>#write
+                        }
+                    };
                     let name = ident.as_ref().expect("FieldsNamed with unnamed field").to_string();
-                    quote!(#ident #write.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
+                    quote!(#write.map_err(|#async_proto_crate::WriteError { context, kind }| #async_proto_crate::WriteError {
                         context: #async_proto_crate::ErrorContext::NamedField {
                             name: #name,
                             source: Box::new(context),
@@ -163,8 +254,25 @@ impl Parse for AsyncProtoAttr {
                     let _ = input.parse::<Token![=]>()?;
                     Self::Via(input.parse()?)
                 }
-                _ => return Err(Error::new(ident.span(), "unknown async_proto attribute")),
+                _ => return Err(Error::new(ident.span(), "unknown async_proto type attribute")),
             }
+        })
+    }
+}
+
+enum FieldAttr {
+    MaxLen(u64),
+}
+
+impl Parse for FieldAttr {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let ident = input.parse::<Ident>()?;
+        Ok(match &*ident.to_string() {
+            "max_len" => {
+                let _ = input.parse::<Token![=]>()?;
+                Self::MaxLen(input.parse::<LitInt>()?.base10_parse()?)
+            }
+            _ => return Err(Error::new(ident.span(), "unknown async_proto field attribute")),
         })
     }
 }
@@ -495,7 +603,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
 
 /// Implements the `Protocol` trait for this type.
 ///
-/// The network representation is very simple:
+/// By default, the network representation is very simple:
 ///
 /// * Attempting to read an `enum` with no variants errors immediately, without waiting for data to appear on the stream.
 /// * For non-empty `enum`s, the representation starts with the discriminant (a number representing the variant), starting with `0` for the first variant declared and so on.
@@ -515,6 +623,12 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
 ///     * `#[async_proto(clone)]`: Replaces the requirement for `&'a T` to implement `TryInto<Proxy>` with requirements for `T` to implement `Clone` and `TryInto<Proxy>`.
 ///     * `#[async_proto(map_err = ...)]`: Removes the requirement for `<Proxy as TryInto<T>>::Error` to implement `Into<ReadErrorKind>` and instead uses the given expression (which should be an `FnOnce(<Proxy as TryInto<T>>::Error) -> ReadErrorKind`) to convert the error.
 /// * `#[async_proto(where(...))]`: Overrides the bounds for the generated `Protocol` implementation. The default is to require `Protocol + Send + Sync + 'static` for each type parameter of this type.
+///
+/// # Field attributes
+///
+/// Additionally, the following attributes can be set on struct or enum fields, rather than the entire type for which `Protocol` is being derived:
+///
+/// * `#[async_proto(max_len = ...)]`: Can be used on a field implementing the `LengthPrefixed` trait to limit the allowable length. Note that this alters the network representation of the length prefix (with a `max_len` of up to 255, the length is represented as a [`u8`]; with a `max_len` of 256 to 65535, as a [`u16`]; and so on), so adding/removing/changing this attribute may break protocol compatibility.
 ///
 /// # Compile errors
 ///

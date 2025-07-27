@@ -24,6 +24,11 @@ pub enum ReadErrorKind {
     EndOfStream,
     #[error("received an infinite or NaN number")]
     FloatNotFinite,
+    #[error("received length ({len}) exceeds specified maximum length ({max_len})")]
+    MaxLen {
+        len: u64,
+        max_len: u64,
+    },
     #[cfg(feature = "tokio-tungstenite021")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
     /// Received a non-`Binary` WebSocket message (e.g. `Text` or `Ping`).
@@ -121,6 +126,7 @@ impl From<ReadErrorKind> for io::Error {
             #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024"))] ReadErrorKind::WebSocketTextMessage024(ref msg) => io::Error::new(if msg.is_empty() { io::ErrorKind::UnexpectedEof } else { io::ErrorKind::InvalidData }, e),
             #[cfg(feature = "tokio-tungstenite027")] ReadErrorKind::WebSocketTextMessage027(ref msg) => io::Error::new(if msg.is_empty() { io::ErrorKind::UnexpectedEof } else { io::ErrorKind::InvalidData }, e),
             ReadErrorKind::FloatNotFinite |
+            ReadErrorKind::MaxLen { .. } |
             ReadErrorKind::UnknownVariant8(_) |
             ReadErrorKind::UnknownVariant16(_) |
             ReadErrorKind::UnknownVariant32(_) |
@@ -164,6 +170,11 @@ pub enum WriteErrorKind {
     #[error("{0}")]
     Custom(String),
     #[error(transparent)] Io(#[from] io::Error),
+    #[error("attempted to write length {len} exceeding specified maximum length ({max_len})")]
+    MaxLen {
+        len: u64,
+        max_len: u64,
+    },
     #[cfg(feature = "tokio-tungstenite021")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
     #[error(transparent)] Tungstenite021(#[from] tungstenite021::Error),
@@ -204,6 +215,7 @@ impl From<WriteErrorKind> for io::Error {
         match e {
             WriteErrorKind::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             WriteErrorKind::Io(e) => e,
+            WriteErrorKind::MaxLen { .. } => io::Error::new(io::ErrorKind::InvalidData, e),
             #[cfg(feature = "tokio-tungstenite021")] WriteErrorKind::Tungstenite021(e) => io::Error::new(io::ErrorKind::Other, e),
             #[cfg(feature = "tokio-tungstenite024")] WriteErrorKind::Tungstenite024(e) => io::Error::new(io::ErrorKind::Other, e),
             #[cfg(feature = "tokio-tungstenite027")] WriteErrorKind::Tungstenite027(e) => io::Error::new(io::ErrorKind::Other, e),

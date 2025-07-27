@@ -19,7 +19,7 @@ tokio-tungstenite027 = ["dep:tokio-tungstenite027", "dep:futures"]
 doubloon = ["dep:doubloon", "rust_decimal"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.25.4" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.26.0" }
 bitvec = { version = "1", optional = true }
 byteorder = "1"
 bytes = { version = "1", optional = true }

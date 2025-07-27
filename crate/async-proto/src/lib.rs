@@ -827,6 +827,20 @@ pub trait Protocol: Sized {
     }
 }
 
+/// This trait allows restricting the acceptable length of collection types.
+///
+/// By default, types from this crate implementing this trait represent their length as a `u64`. If the maximum length is limited (e.g. using the `#[async_proto(max_len = ...)]` attribute when deriving [`Protocol`]), the length may be represented using a smaller integer type.
+pub trait LengthPrefixed: Protocol {
+    /// Reads a value of this type from an async stream, limiting the length to the given value.
+    fn read_length_prefixed<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>>;
+    /// Writes a value of this type to an async sink, limiting the length to the given value.
+    fn write_length_prefixed<'a, W: AsyncWrite + Unpin + Send + 'a>(&'a self, sink: &'a mut W, max_len: u64) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>;
+    /// Reads a value of this type from a sync stream, limiting the length to the given value.
+    fn read_length_prefixed_sync(stream: &mut impl Read, max_len: u64) -> Result<Self, ReadError>;
+    /// Writes a value of this type to a sync sink, limiting the length to the given value.
+    fn write_length_prefixed_sync(&self, sink: &mut impl Write, max_len: u64) -> Result<(), WriteError>;
+}
+
 /// Establishes a WebSocket connection to the given URL and returns a typed sink/stream pair.
 ///
 /// Useful for WebSocket connections where the message type per direction is always the same.
