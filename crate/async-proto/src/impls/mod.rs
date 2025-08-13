@@ -68,6 +68,7 @@ use {
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
 #[cfg(feature = "serenity")] mod serenity;
+#[cfg(feature = "url")] mod url;
 #[cfg(feature = "uuid")] mod uuid;
 
 async fn read_len<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R, max_len: u64, error_ctx: impl Fn() -> ErrorContext) -> Result<usize, ReadError> {
