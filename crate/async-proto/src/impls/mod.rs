@@ -64,6 +64,7 @@ use {
 #[cfg(feature = "git2")] mod git2;
 #[cfg(feature = "gix-hash")] mod gix_hash;
 #[cfg(feature = "noisy_float")] mod noisy_float;
+#[cfg(feature = "nonempty-collections")] mod nonempty_collections;
 #[cfg(feature = "rust_decimal")] mod rust_decimal;
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
@@ -525,6 +526,7 @@ impl<T: Protocol + Ord + Send + Sync + 'static> LengthPrefixed for BTreeSet<T> {
     }
 }
 
+/// A set is prefixed with the length as a [`u64`].
 impl<T: Protocol + Eq + Hash + Send + Sync> Protocol for HashSet<T> {
     fn read<'a, R: AsyncRead + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Self::read_length_prefixed(stream, u64::MAX)
