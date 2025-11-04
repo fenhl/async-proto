@@ -34,7 +34,7 @@
 //!
 //! Additionally, this crate offers optional dependencies on the `tokio-tungstenite` crate to add convenience methods for reading/writing [`Protocol`] types from/to its websockets. The following versions are supported:
 //!
-//! * The latest release (currently [`tokio-tungstenite` 0.27](https://docs.rs/tokio-tungstenite/0.27), feature flag `tokio-tungstenite027`)
+//! * The latest release (currently [`tokio-tungstenite` 0.28](https://docs.rs/tokio-tungstenite/0.28), feature flag `tokio-tungstenite028`)
 //! * The version used by [the `master` branch of `rocket_ws` on GitHub](https://github.com/rwf2/Rocket/tree/master/contrib/ws) (currently [`tokio-tungstenite` 0.24](https://docs.rs/tokio-tungstenite/0.24), feature flag `tokio-tungstenite024`)
 //! * The version used by [the latest `rocket_ws` crates.io release](https://docs.rs/rocket_ws) (currently [`tokio-tungstenite` 0.21](https://docs.rs/tokio-tungstenite/0.21), feature flag `tokio-tungstenite021`)
 
@@ -52,7 +52,7 @@ use {
         AsyncWrite,
     },
 };
-#[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite027"))] use {
+#[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite028"))] use {
     std::{
         iter,
         mem,
@@ -75,7 +75,7 @@ use {
 };
 #[cfg(feature = "tokio-tungstenite021")] use tokio_tungstenite021::tungstenite as tungstenite021;
 #[cfg(feature = "tokio-tungstenite024")] use tokio_tungstenite024::tungstenite as tungstenite024;
-#[cfg(feature = "tokio-tungstenite027")] use tokio_tungstenite027::tungstenite as tungstenite027;
+#[cfg(feature = "tokio-tungstenite028")] use tokio_tungstenite028::tungstenite as tungstenite028;
 pub use {
     async_proto_derive::{
         Protocol,
@@ -89,7 +89,7 @@ mod error;
 mod impls;
 
 /// The maximum message size that can be sent and received by tokio-tungstenite without errors on the default configuration.
-#[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite027"))] const WS_MAX_MESSAGE_SIZE: usize = 16777216;
+#[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite024", feature = "tokio-tungstenite028"))] const WS_MAX_MESSAGE_SIZE: usize = 16777216;
 
 /// This trait allows reading a value of an implementing type from an async or sync stream, as well as writing one to an async or sync sink.
 pub trait Protocol: Sized {
@@ -330,14 +330,14 @@ pub trait Protocol: Sized {
         })
     }
 
-    #[cfg(feature = "tokio-tungstenite027")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite027")))]
+    #[cfg(feature = "tokio-tungstenite028")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite028")))]
     /// Reads a value of this type from a `tokio-tungstenite` websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is not cancellation safe.
-    fn read_ws027<'a, R: Stream<Item = Result<tungstenite027::Message, tungstenite027::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
+    fn read_ws028<'a, R: Stream<Item = Result<tungstenite028::Message, tungstenite028::Error>> + Unpin + Send + 'a>(stream: &'a mut R) -> Pin<Box<dyn Future<Output = Result<Self, ReadError>> + Send + 'a>> {
         Box::pin(async move {
             let packet = stream.try_next().await.map_err(|e| ReadError {
                 context: ErrorContext::DefaultImpl,
@@ -347,7 +347,7 @@ pub trait Protocol: Sized {
                 kind: ReadErrorKind::EndOfStream,
             })?;
             match packet {
-                tungstenite027::Message::Text(data) => match data.chars().next() {
+                tungstenite028::Message::Text(data) => match data.chars().next() {
                     Some('m') => {
                         let len = data[1..].parse::<usize>().map_err(|e| ReadError {
                             context: ErrorContext::DefaultImpl,
@@ -365,12 +365,12 @@ pub trait Protocol: Sized {
                                 context: ErrorContext::DefaultImpl,
                                 kind: ReadErrorKind::EndOfStream,
                             })?;
-                            if let tungstenite027::Message::Binary(data) = packet {
+                            if let tungstenite028::Message::Binary(data) = packet {
                                 buf.extend_from_slice(&data);
                             } else {
                                 return Err(ReadError {
                                     context: ErrorContext::DefaultImpl,
-                                    kind: ReadErrorKind::MessageKind027(packet),
+                                    kind: ReadErrorKind::MessageKind028(packet),
                                 })
                             }
                         }
@@ -383,10 +383,10 @@ pub trait Protocol: Sized {
                     }
                     _ => Err(ReadError {
                         context: ErrorContext::DefaultImpl,
-                        kind: ReadErrorKind::WebSocketTextMessage027(data),
+                        kind: ReadErrorKind::WebSocketTextMessage028(data),
                     }),
                 },
-                tungstenite027::Message::Binary(data) => Self::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
+                tungstenite028::Message::Binary(data) => Self::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
                     context: ErrorContext::WebSocket {
                         source: Box::new(context),
                     },
@@ -394,7 +394,7 @@ pub trait Protocol: Sized {
                 }),
                 _ => Err(ReadError {
                     context: ErrorContext::DefaultImpl,
-                    kind: ReadErrorKind::MessageKind027(packet),
+                    kind: ReadErrorKind::MessageKind028(packet),
                 }),
             }
         })
@@ -476,14 +476,14 @@ pub trait Protocol: Sized {
         })
     }
 
-    #[cfg(feature = "tokio-tungstenite027")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite027")))]
+    #[cfg(feature = "tokio-tungstenite028")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite028")))]
     /// Writes a value of this type to a `tokio-tungstenite` websocket.
     ///
     /// # Cancellation safety
     ///
     /// The default implementation of this method is not cancellation safe.
-    fn write_ws027<'a, W: Sink<tungstenite027::Message, Error = tungstenite027::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
+    fn write_ws028<'a, W: Sink<tungstenite028::Message, Error = tungstenite028::Error> + Unpin + Send + 'a>(&'a self, sink: &'a mut W) -> Pin<Box<dyn Future<Output = Result<(), WriteError>> + Send + 'a>>
     where Self: Sync {
         Box::pin(async move {
             let mut buf = Vec::default();
@@ -494,17 +494,17 @@ pub trait Protocol: Sized {
                 kind,
             })?;
             if buf.len() <= WS_MAX_MESSAGE_SIZE {
-                sink.send(tungstenite027::Message::binary(buf)).await.map_err(|e| WriteError {
+                sink.send(tungstenite028::Message::binary(buf)).await.map_err(|e| WriteError {
                     context: ErrorContext::DefaultImpl,
                     kind: e.into(),
                 })?;
             } else {
-                sink.send(tungstenite027::Message::text(format!("m{}", buf.len()))).await.map_err(|e| WriteError {
+                sink.send(tungstenite028::Message::text(format!("m{}", buf.len()))).await.map_err(|e| WriteError {
                     context: ErrorContext::DefaultImpl,
                     kind: e.into(),
                 })?;
                 for chunk in buf.chunks(WS_MAX_MESSAGE_SIZE) {
-                    sink.send(tungstenite027::Message::binary(tungstenite027::Bytes::copy_from_slice(chunk))).await.map_err(|e| WriteError {
+                    sink.send(tungstenite028::Message::binary(tungstenite028::Bytes::copy_from_slice(chunk))).await.map_err(|e| WriteError {
                         context: ErrorContext::DefaultImpl,
                         kind: e.into(),
                     })?;
@@ -630,16 +630,16 @@ pub trait Protocol: Sized {
         }
     }
 
-    #[cfg(feature = "tokio-tungstenite027")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite027")))]
-    /// Reads a value of this type from a [`tungstenite027`] websocket.
-    fn read_ws_sync027(websocket: &mut tungstenite027::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
+    #[cfg(feature = "tokio-tungstenite028")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite028")))]
+    /// Reads a value of this type from a [`tungstenite028`] websocket.
+    fn read_ws_sync028(websocket: &mut tungstenite028::WebSocket<impl Read + Write>) -> Result<Self, ReadError> {
         let packet = websocket.read().map_err(|e| ReadError {
             context: ErrorContext::DefaultImpl,
             kind: e.into(),
         })?;
         match packet {
-            tungstenite027::Message::Text(data) => match data.chars().next() {
+            tungstenite028::Message::Text(data) => match data.chars().next() {
                 Some('m') => {
                     let len = data[1..].parse::<usize>().map_err(|e| ReadError {
                         context: ErrorContext::DefaultImpl,
@@ -654,12 +654,12 @@ pub trait Protocol: Sized {
                             context: ErrorContext::DefaultImpl,
                             kind: e.into(),
                         })?;
-                        if let tungstenite027::Message::Binary(data) = packet {
+                        if let tungstenite028::Message::Binary(data) = packet {
                             buf.extend_from_slice(&data);
                         } else {
                             return Err(ReadError {
                                 context: ErrorContext::DefaultImpl,
-                                kind: ReadErrorKind::MessageKind027(packet),
+                                kind: ReadErrorKind::MessageKind028(packet),
                             })
                         }
                     }
@@ -672,10 +672,10 @@ pub trait Protocol: Sized {
                 }
                 _ => return Err(ReadError {
                     context: ErrorContext::DefaultImpl,
-                    kind: ReadErrorKind::WebSocketTextMessage027(data),
+                    kind: ReadErrorKind::WebSocketTextMessage028(data),
                 }),
             },
-            tungstenite027::Message::Binary(data) => Self::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
+            tungstenite028::Message::Binary(data) => Self::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
                 context: ErrorContext::WebSocket {
                     source: Box::new(context),
                 },
@@ -683,7 +683,7 @@ pub trait Protocol: Sized {
             }),
             _ => Err(ReadError {
                 context: ErrorContext::DefaultImpl,
-                kind: ReadErrorKind::MessageKind027(packet),
+                kind: ReadErrorKind::MessageKind028(packet),
             }),
         }
     }
@@ -758,10 +758,10 @@ pub trait Protocol: Sized {
         Ok(())
     }
 
-    #[cfg(feature = "tokio-tungstenite027")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite027")))]
-    /// Writes a value of this type to a [`tungstenite027`] websocket.
-    fn write_ws_sync027(&self, websocket: &mut tungstenite027::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
+    #[cfg(feature = "tokio-tungstenite028")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite028")))]
+    /// Writes a value of this type to a [`tungstenite028`] websocket.
+    fn write_ws_sync028(&self, websocket: &mut tungstenite028::WebSocket<impl Read + Write>) -> Result<(), WriteError> {
         let mut buf = Vec::default();
         self.write_sync(&mut buf).map_err(|WriteError { context, kind }| WriteError {
             context: ErrorContext::WebSocket {
@@ -770,17 +770,17 @@ pub trait Protocol: Sized {
             kind,
         })?;
         if buf.len() <= WS_MAX_MESSAGE_SIZE {
-            websocket.send(tungstenite027::Message::binary(buf)).map_err(|e| WriteError {
+            websocket.send(tungstenite028::Message::binary(buf)).map_err(|e| WriteError {
                 context: ErrorContext::DefaultImpl,
                 kind: e.into(),
             })?;
         } else {
-            websocket.send(tungstenite027::Message::text(format!("m{}", buf.len()))).map_err(|e| WriteError {
+            websocket.send(tungstenite028::Message::text(format!("m{}", buf.len()))).map_err(|e| WriteError {
                 context: ErrorContext::DefaultImpl,
                 kind: e.into(),
             })?;
             for chunk in buf.chunks(WS_MAX_MESSAGE_SIZE) {
-                websocket.send(tungstenite027::Message::binary(tungstenite027::Bytes::copy_from_slice(chunk))).map_err(|e| WriteError {
+                websocket.send(tungstenite028::Message::binary(tungstenite028::Bytes::copy_from_slice(chunk))).map_err(|e| WriteError {
                     context: ErrorContext::DefaultImpl,
                     kind: e.into(),
                 })?;
@@ -817,14 +817,14 @@ pub trait Protocol: Sized {
         })
     }
 
-    #[cfg(feature = "tokio-tungstenite027")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite027")))]
+    #[cfg(feature = "tokio-tungstenite028")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite028")))]
     /// Takes ownership of an async websocket stream, reads a value of this type from it, then returns it along with the stream.
     ///
     /// This can be used to get around drop glue issues that might arise with `read_ws`.
-    fn read_ws_owned027<R: Stream<Item = Result<tungstenite027::Message, tungstenite027::Error>> + Unpin + Send + 'static>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<(R, Self), ReadError>> + Send>> {
+    fn read_ws_owned028<R: Stream<Item = Result<tungstenite028::Message, tungstenite028::Error>> + Unpin + Send + 'static>(mut stream: R) -> Pin<Box<dyn Future<Output = Result<(R, Self), ReadError>> + Send>> {
         Box::pin(async move {
-            let value = Self::read_ws027(&mut stream).await?;
+            let value = Self::read_ws028(&mut stream).await?;
             Ok((stream, value))
         })
     }
@@ -1043,10 +1043,10 @@ pub async fn websocket024<R: Protocol, W: Protocol>(request: impl tungstenite024
 /// Establishes a WebSocket connection to the given URL and returns a typed sink/stream pair.
 ///
 /// Useful for WebSocket connections where the message type per direction is always the same.
-#[cfg(feature = "tokio-tungstenite027")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite027")))]
-pub async fn websocket027<R: Protocol, W: Protocol>(request: impl tungstenite027::client::IntoClientRequest + Unpin) -> tungstenite027::Result<(impl Sink<W, Error = WriteError>, impl Stream<Item = Result<R, ReadError>>)> {
-    let (sock, _) = tokio_tungstenite027::connect_async(request).await?;
+#[cfg(feature = "tokio-tungstenite028")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite028")))]
+pub async fn websocket028<R: Protocol, W: Protocol>(request: impl tungstenite028::client::IntoClientRequest + Unpin) -> tungstenite028::Result<(impl Sink<W, Error = WriteError>, impl Stream<Item = Result<R, ReadError>>)> {
+    let (sock, _) = tokio_tungstenite028::connect_async(request).await?;
     let (sink, stream) = sock.split();
     Ok((
         sink.sink_map_err(|e| WriteError {
@@ -1056,11 +1056,11 @@ pub async fn websocket027<R: Protocol, W: Protocol>(request: impl tungstenite027
             let mut buf = Vec::default();
             match msg.write_sync(&mut buf) {
                 Ok(()) => Either::Left(if buf.len() <= WS_MAX_MESSAGE_SIZE {
-                    Either::Left(stream::once(future::ready(tungstenite027::Message::binary(buf))))
+                    Either::Left(stream::once(future::ready(tungstenite028::Message::binary(buf))))
                 } else {
                     Either::Right(stream::iter(
-                        iter::once(tungstenite027::Message::text(format!("m{}", buf.len())))
-                        .chain(buf.chunks(WS_MAX_MESSAGE_SIZE).map(|chunk| tungstenite027::Message::binary(tungstenite027::Bytes::copy_from_slice(chunk))))
+                        iter::once(tungstenite028::Message::text(format!("m{}", buf.len())))
+                        .chain(buf.chunks(WS_MAX_MESSAGE_SIZE).map(|chunk| tungstenite028::Message::binary(tungstenite028::Bytes::copy_from_slice(chunk))))
                         .collect::<Vec<_>>()
                     ))
                 }.map(Ok)),
@@ -1073,18 +1073,18 @@ pub async fn websocket027<R: Protocol, W: Protocol>(request: impl tungstenite027
             }
         }),
         stream.scan(None, |state, res| {
-            fn scanner<R: Protocol>(state: &mut Option<(usize, Vec<u8>)>, res: tungstenite027::Result<tungstenite027::Message>) -> Result<impl Stream<Item = Result<R, ReadError>> + use<R>, ReadError> {
+            fn scanner<R: Protocol>(state: &mut Option<(usize, Vec<u8>)>, res: tungstenite028::Result<tungstenite028::Message>) -> Result<impl Stream<Item = Result<R, ReadError>> + use<R>, ReadError> {
                 let packet = res.map_err(|e| ReadError {
                     context: ErrorContext::WebSocketStream,
                     kind: e.into(),
                 })?;
                 Ok(if let Some((len, buf)) = state {
-                    if let tungstenite027::Message::Binary(data) = packet {
+                    if let tungstenite028::Message::Binary(data) = packet {
                         buf.extend_from_slice(&data);
                     } else {
                         return Err(ReadError {
                             context: ErrorContext::DefaultImpl,
-                            kind: ReadErrorKind::MessageKind027(packet),
+                            kind: ReadErrorKind::MessageKind028(packet),
                         })
                     }
                     if buf.len() >= *len {
@@ -1101,7 +1101,7 @@ pub async fn websocket027<R: Protocol, W: Protocol>(request: impl tungstenite027
                     }
                 } else {
                     match packet {
-                        tungstenite027::Message::Text(data) => match data.chars().next() {
+                        tungstenite028::Message::Text(data) => match data.chars().next() {
                             Some('m') => {
                                 let len = data[1..].parse::<usize>().map_err(|e| ReadError {
                                     context: ErrorContext::DefaultImpl,
@@ -1116,10 +1116,10 @@ pub async fn websocket027<R: Protocol, W: Protocol>(request: impl tungstenite027
                             }
                             _ => return Err(ReadError {
                                 context: ErrorContext::DefaultImpl,
-                                kind: ReadErrorKind::WebSocketTextMessage027(data),
+                                kind: ReadErrorKind::WebSocketTextMessage028(data),
                             }),
                         },
-                        tungstenite027::Message::Binary(data) => Either::Right(stream::once(future::ok(R::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
+                        tungstenite028::Message::Binary(data) => Either::Right(stream::once(future::ok(R::read_sync(&mut &*data).map_err(|ReadError { context, kind }| ReadError {
                             context: ErrorContext::WebSocket {
                                 source: Box::new(context),
                             },
@@ -1127,7 +1127,7 @@ pub async fn websocket027<R: Protocol, W: Protocol>(request: impl tungstenite027
                         })?))),
                         _ => return Err(ReadError {
                             context: ErrorContext::DefaultImpl,
-                            kind: ReadErrorKind::MessageKind027(packet),
+                            kind: ReadErrorKind::MessageKind028(packet),
                         }),
                     }
                 })

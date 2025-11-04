@@ -4,6 +4,6 @@ default-members = ["crate/async-proto"]
 resolver = "2"
 
 [workspace.package]
-version = "0.26.4"
+version = "0.26.5"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2024"

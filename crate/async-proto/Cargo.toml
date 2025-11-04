@@ -15,11 +15,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 tokio-tungstenite021 = ["dep:tokio-tungstenite021", "dep:futures"]
 tokio-tungstenite024 = ["dep:tokio-tungstenite024", "dep:futures"]
-tokio-tungstenite027 = ["dep:tokio-tungstenite027", "dep:futures"]
+tokio-tungstenite028 = ["dep:tokio-tungstenite028", "dep:futures"]
 doubloon = ["dep:doubloon", "rust_decimal"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.26.4" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.26.5" }
 bitvec = { version = "1", optional = true }
 byteorder = "1"
 bytes = { version = "1", optional = true }
@@ -32,7 +32,7 @@ enumset = { version = "1", optional = true }
 fallible_collections = { version = "0.5", features = ["rust_1_57"] }
 futures = { version = "0.3", optional = true }
 git2 = { version = "0.20", default-features = false, optional = true }
-gix-hash = { version = "0.19", optional = true }
+gix-hash = { version = "0.20", optional = true }
 noisy_float = { version = "0.2", optional = true }
 nonempty-collections = { version = "1.0.0", optional = true }
 rust_decimal = { version = "1.36.0", optional = true }
@@ -43,6 +43,6 @@ thiserror = "2"
 tokio = { version = "1", features = ["io-util"] }
 tokio-tungstenite021 = { package = "tokio-tungstenite", version = "0.21", optional = true, features = ["rustls-tls-webpki-roots"] }
 tokio-tungstenite024 = { package = "tokio-tungstenite", version = "0.24", optional = true, features = ["rustls-tls-webpki-roots"] }
-tokio-tungstenite027 = { package = "tokio-tungstenite", version = "0.27", optional = true, features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite028 = { package = "tokio-tungstenite", version = "0.28", optional = true, features = ["rustls-tls-webpki-roots"] }
 url = { version = "2.5.4", optional = true }
 uuid = { version = "1", optional = true }

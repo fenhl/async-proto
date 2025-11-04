@@ -16,8 +16,11 @@ impl From<OidProxy> for ObjectId {
 
 impl<'a> From<&'a ObjectId> for OidProxy {
     fn from(oid: &ObjectId) -> Self {
-        match *oid {
-            ObjectId::Sha1(sha1) => Self(sha1),
+        match oid.kind() {
+            gix_hash::Kind::Sha1 => {
+                let ObjectId::Sha1(sha1) = *oid else { unreachable!("gix-hash kind mismatch") };
+                Self(sha1)
+            }
         }
     }
 }
