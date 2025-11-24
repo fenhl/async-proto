@@ -69,6 +69,7 @@ use {
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
 #[cfg(feature = "serenity")] mod serenity;
+#[cfg(feature = "hematite-nbt")] mod hematite_nbt;
 #[cfg(feature = "url")] mod url;
 #[cfg(feature = "uuid")] mod uuid;
 

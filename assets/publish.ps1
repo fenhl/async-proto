@@ -4,18 +4,8 @@ if (-not $?)
     throw 'Native Failure'
 }
 
-cd crate\async-proto-derive
-cargo publish
+cargo publish --workspace
 if (-not $?)
 {
     throw 'Native Failure'
 }
-
-cd ..\async-proto
-cargo publish
-if (-not $?)
-{
-    throw 'Native Failure'
-}
-
-cd ..\..
