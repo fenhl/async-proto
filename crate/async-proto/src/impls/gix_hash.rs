@@ -21,6 +21,7 @@ impl<'a> From<&'a ObjectId> for OidProxy {
                 let ObjectId::Sha1(sha1) = *oid else { unreachable!("gix-hash kind mismatch") };
                 Self(sha1)
             }
+            _ => unreachable!("enum marked as nonexhaustive"),
         }
     }
 }
