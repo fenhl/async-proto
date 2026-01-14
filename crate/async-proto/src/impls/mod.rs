@@ -65,6 +65,7 @@ use {
 #[cfg(feature = "gix-hash")] mod gix_hash;
 #[cfg(feature = "noisy_float")] mod noisy_float;
 #[cfg(feature = "nonempty-collections")] mod nonempty_collections;
+#[cfg(feature = "os_info")] mod os_info;
 #[cfg(feature = "rust_decimal")] mod rust_decimal;
 #[cfg(feature = "semver")] mod semver;
 #[cfg(feature = "serde_json")] mod serde_json;
