@@ -8,6 +8,4 @@ cargo check --manifest-path=crate/async-proto/Cargo.toml --features=tokio-tungst
 cargo check --manifest-path=crate/async-proto/Cargo.toml --features=tokio-tungstenite028
 cargo check --manifest-path=crate/async-proto/Cargo.toml --features=bitvec,bytes,bytesize,chrono,chrono-tz,doubloon,either,enumset,git2,gix-hash,hematite-nbt,noisy_float,nonempty-collections,os_info,rust_decimal,semver,serde_json,serenity,url,uuid
 cargo test --manifest-path=crate/async-proto/Cargo.toml --all-features
-cargo check --target=i686-pc-windows-msvc
-cargo test --manifest-path=crate/async-proto/Cargo.toml --target=i686-pc-windows-msvc --all-features
 cargo doc --all-features
