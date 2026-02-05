@@ -47,9 +47,6 @@ impl_protocol_for! {
     struct doubloon::iso_currencies::AMD;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
-    struct doubloon::iso_currencies::ANG;
-
-    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::AOA;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
@@ -72,9 +69,6 @@ impl_protocol_for! {
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::BDT;
-
-    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
-    struct doubloon::iso_currencies::BGN;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::BHD;
@@ -144,9 +138,6 @@ impl_protocol_for! {
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::CRC;
-
-    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
-    struct doubloon::iso_currencies::CUC;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::CUP;
@@ -509,6 +500,9 @@ impl_protocol_for! {
     struct doubloon::iso_currencies::WST;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
+    struct doubloon::iso_currencies::XAD;
+
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::XAF;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
@@ -531,6 +525,9 @@ impl_protocol_for! {
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::XCD;
+
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
+    struct doubloon::iso_currencies::XCG;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::XDR;
@@ -570,7 +567,4 @@ impl_protocol_for! {
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
     struct doubloon::iso_currencies::ZWG;
-
-    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "doubloon")))))]
-    struct doubloon::iso_currencies::ZWL;
 }
