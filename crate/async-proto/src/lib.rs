@@ -23,6 +23,7 @@
 //! * [`enumset`](https://docs.rs/enumset): [`EnumSet`](https://docs.rs/enumset/latest/enumset/struct.EnumSet.html)
 //! * [`git2`](https://docs.rs/git2): [`Oid`](https://docs.rs/git2/latest/git2/struct.Oid.html)
 //! * [`gix-hash`](https://docs.rs/gix-hash): [`ObjectId`](https://docs.rs/gix-hash/latest/gix_hash/enum.ObjectId.html)
+//! * [`hematite-nbt`](https://docs.rs/hematite-nbt): [`Blob`](https://docs.rs/hematite-nbt/latest/nbt/struct.Blob.html)
 //! * [`noisy_float`](https://docs.rs/noisy_float): [`NoisyFloat`](https://docs.rs/noisy_float/latest/noisy_float/struct.NoisyFloat.html)
 //! * [`nonempty-collections`](https://docs.rs/nonempty-collections): [`NEMap`](https://docs.rs/nonempty-collections/latest/nonempty_collections/map/struct.NEMap.html), [`NESet`](https://docs.rs/nonempty-collections/latest/nonempty_collections/set/struct.NESet.html), and [`NEVec`](https://docs.rs/nonempty-collections/latest/nonempty_collections/vector/struct.NEVec.html)
 //! * [`os_info`](https://docs.rs/os_info): [`Type`](https://docs.rs/os_info/latest/os_info/enum.Type.html) and [`Version`](https://docs.rs/os_info/latest/os_info/enum.Version.html)
@@ -30,7 +31,6 @@
 //! * [`semver`](https://docs.rs/semver): [`Version`](https://docs.rs/semver/latest/semver/struct.Version.html), [`Prerelease`](https://docs.rs/semver/latest/semver/struct.Prerelease.html), and [`BuildMetadata`](https://docs.rs/semver/latest/semver/struct.BuildMetadata.html)
 //! * [`serde_json`](https://docs.rs/serde_json): [`Value`](https://docs.rs/serde_json/latest/serde_json/enum.Value.html), [`Map`](https://docs.rs/serde_json/latest/serde_json/struct.Map.html), and [`Number`](https://docs.rs/serde_json/latest/serde_json/struct.Number.html)
 //! * [`serenity`](https://docs.rs/serenity): The [ID types](https://docs.rs/serenity/latest/serenity/model/id/index.html), not including [`ShardId`](https://docs.rs/serenity/latest/serenity/model/id/struct.ShardId.html)
-//! * [`hematite-nbt`](https://docs.rs/hematite-nbt): [`Blob`](https://docs.rs/hematite-nbt/latest/nbt/struct.Blob.html)
 //! * [`url`](https://docs.rs/url): [`Url`](https://docs.rs/url/latest/url/struct.Url.html)
 //! * [`uuid`](https://docs.rs/uuid): [`Uuid`](https://docs.rs/uuid/latest/uuid/struct.Uuid.html)
 //!
