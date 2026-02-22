@@ -23,7 +23,7 @@
 //! * [`enumset`](https://docs.rs/enumset): [`EnumSet`](https://docs.rs/enumset/latest/enumset/struct.EnumSet.html)
 //! * [`git2`](https://docs.rs/git2): [`Oid`](https://docs.rs/git2/latest/git2/struct.Oid.html)
 //! * [`gix-hash`](https://docs.rs/gix-hash): [`ObjectId`](https://docs.rs/gix-hash/latest/gix_hash/enum.ObjectId.html)
-//! * [`hematite-nbt`](https://docs.rs/hematite-nbt): [`Blob`](https://docs.rs/hematite-nbt/latest/nbt/struct.Blob.html)
+//! * [`hematite-nbt`](https://docs.rs/hematite-nbt): [`Blob`](https://docs.rs/hematite-nbt/latest/nbt/struct.Blob.html) and [`Value`](https://docs.rs/hematite-nbt/latest/nbt/enum.Value.html)
 //! * [`noisy_float`](https://docs.rs/noisy_float): [`NoisyFloat`](https://docs.rs/noisy_float/latest/noisy_float/struct.NoisyFloat.html)
 //! * [`nonempty-collections`](https://docs.rs/nonempty-collections): [`NEMap`](https://docs.rs/nonempty-collections/latest/nonempty_collections/map/struct.NEMap.html), [`NESet`](https://docs.rs/nonempty-collections/latest/nonempty_collections/set/struct.NESet.html), and [`NEVec`](https://docs.rs/nonempty-collections/latest/nonempty_collections/vector/struct.NEVec.html)
 //! * [`os_info`](https://docs.rs/os_info): [`Type`](https://docs.rs/os_info/latest/os_info/enum.Type.html) and [`Version`](https://docs.rs/os_info/latest/os_info/enum.Version.html)

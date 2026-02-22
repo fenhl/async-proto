@@ -10,6 +10,7 @@ use {
         AsyncWrite,
         AsyncWriteExt as _,
     },
+    async_proto_derive::impl_protocol_for,
     crate::{
         ErrorContext,
         LengthPrefixed,
@@ -108,4 +109,33 @@ impl LengthPrefixed for nbt::Blob {
         })?;
         Ok(())
     }
+}
+
+#[derive(Protocol)]
+#[async_proto(internal)]
+struct ValueProxy(nbt::Blob);
+
+impl TryFrom<ValueProxy> for nbt::Value {
+    type Error = ReadErrorKind;
+
+    fn try_from(ValueProxy(blob): ValueProxy) -> Result<Self, Self::Error> {
+        Ok(blob.get("").ok_or_else(|| ReadErrorKind::Custom(format!("NBT blob missing empty-string entry")))?.clone())
+    }
+}
+
+impl TryFrom<nbt::Value> for ValueProxy {
+    type Error = WriteErrorKind;
+
+    fn try_from(value: nbt::Value) -> Result<Self, Self::Error> {
+        let mut blob = nbt::Blob::default();
+        blob.insert("", value).map_err(|e| WriteErrorKind::Custom(e.to_string()))?;
+        Ok(Self(blob))
+    }
+}
+
+impl_protocol_for! {
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "hematite-nbt")))))]
+    #[async_proto(attr(doc = "An [`nbt::Value`] is represented as an [`nbt::Blob`] with no name and a single entry with no name containing the original value."))]
+    #[async_proto(via = ValueProxy, clone)]
+    type nbt::Value;
 }
