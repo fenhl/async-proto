@@ -20,7 +20,7 @@ doubloon = ["dep:doubloon", "rust_decimal"]
 os_info = ["dep:os_info", "dep:serde_plain"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.26.14" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.26.15" }
 bitvec = { version = "1", optional = true }
 byteorder = "1"
 bytes = { version = "1", optional = true }
@@ -33,7 +33,7 @@ enumset = { version = "1", optional = true }
 fallible_collections = { version = "0.5", features = ["rust_1_57"] }
 futures = { version = "0.3", optional = true }
 git2 = { version = "0.20", default-features = false, optional = true }
-gix-hash = { version = "0.23", features = ["sha1"], optional = true }
+gix-hash = { version = "0.25", features = ["sha1"], optional = true }
 hematite-nbt = { version = "0.5", default-features = false, optional = true }
 noisy_float = { version = "0.2", optional = true }
 nonempty-collections = { version = "1", optional = true }
