@@ -3,6 +3,7 @@ name = "async-proto"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Simple async binary network protocols"
 license = "MIT"
 readme = "../../README.md"
@@ -20,7 +21,7 @@ doubloon = ["dep:doubloon", "rust_decimal"]
 os_info = ["dep:os_info", "dep:serde_plain"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.26.15" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.26.16" }
 bitvec = { version = "1", optional = true }
 byteorder = "1"
 bytes = { version = "1", optional = true }
