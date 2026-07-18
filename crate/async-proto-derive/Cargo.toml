@@ -16,7 +16,7 @@ all-features = true
 proc-macro = true
 
 [dependencies]
-itertools = "0.14"
+itertools = "0.15"
 proc-macro2 = "1"
 quote = "1"
-syn = { version = "2", features = ["full"] }
+syn = { version = "3", features = ["full"] }
