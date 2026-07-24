@@ -4,7 +4,7 @@ default-members = ["crate/async-proto"]
 resolver = "3"
 
 [workspace.package]
-version = "0.26.16"
+version = "0.26.17"
 authors = ["Fenhl <fenhl@fenhl.net>"]
 edition = "2024"
 rust-version = "1.95" # nixpkgs stable
