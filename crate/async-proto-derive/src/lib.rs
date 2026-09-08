@@ -586,6 +586,7 @@ fn impl_protocol_inner(mut internal: bool, attrs: Vec<Attribute>, qual_ty: Path,
     let (impl_generics, ty_generics, where_clause) = impl_generics.split_for_impl();
     quote! {
         #(#[#impl_attrs])*
+        #[allow(unreachable_code)] // proc macro may generate unreachable code, e.g. the `Box::pin` wrapper expression below for writing enums with no variants
         impl #impl_generics #async_proto_crate::Protocol for #qual_ty #ty_generics #where_clause {
             fn read<'a, R: #async_proto_crate::tokio::io::AsyncRead + ::core::marker::Unpin + ::core::marker::Send + 'a>(stream: &'a mut R) -> ::std::pin::Pin<::std::boxed::Box<dyn ::std::future::Future<Output = ::core::result::Result<Self, #async_proto_crate::ReadError>> + ::core::marker::Send + 'a>> {
                 ::std::boxed::Box::pin(async move { #impl_read })

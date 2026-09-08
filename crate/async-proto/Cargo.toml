@@ -21,7 +21,7 @@ doubloon = ["dep:doubloon", "rust_decimal"]
 os_info = ["dep:os_info", "dep:serde_plain"]
 
 [dependencies]
-async-proto-derive = { path = "../async-proto-derive", version = "=0.26.17" }
+async-proto-derive = { path = "../async-proto-derive", version = "=0.26.18" }
 bitvec = { version = "1", optional = true }
 byteorder = "1"
 bytes = { version = "1", optional = true }
