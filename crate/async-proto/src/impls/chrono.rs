@@ -93,6 +93,7 @@ impl_protocol_for! {
     type FixedOffset;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono")))))]
+    #[async_proto(attr(doc = "`chrono::DateTime<Utc>` uses the same representation as `jiff::Timestamp`."))]
     #[async_proto(via = DateTimeProxy<Tz>, where(Tz: Protocol + TimeZone + Send + Sync + 'static, Tz::Offset: Sync))]
     type DateTime<Tz: TimeZone>;
 }

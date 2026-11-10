@@ -63,6 +63,7 @@ use {
 #[cfg(feature = "enumset")] mod enumset;
 #[cfg(feature = "git2")] mod git2;
 #[cfg(feature = "gix-hash")] mod gix_hash;
+#[cfg(feature = "jiff")] mod jiff;
 #[cfg(feature = "noisy_float")] mod noisy_float;
 #[cfg(feature = "nonempty-collections")] mod nonempty_collections;
 #[cfg(feature = "os_info")] mod os_info;
