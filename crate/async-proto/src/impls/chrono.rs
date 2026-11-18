@@ -85,6 +85,7 @@ impl_protocol_for! {
     struct Utc;
 
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "chrono")))))]
+    #[async_proto(attr(doc = "Uses the same representation as `jiff::civil::Date`."))]
     #[async_proto(via = NaiveDateProxy)]
     type NaiveDate;
 
