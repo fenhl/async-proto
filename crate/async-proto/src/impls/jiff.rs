@@ -2,12 +2,15 @@ use {
     jiff::{
         Span,
         Timestamp,
+        ZonedDateTime,
         civil,
+        tz::TimeZone,
     },
     async_proto_derive::impl_protocol_for,
     crate::{
         Protocol,
         ReadErrorKind,
+        WriteErrorKind,
     },
 };
 
@@ -66,6 +69,50 @@ impl<'a> From<&'a civil::Date> for CivilDateProxy {
     }
 }
 
+#[derive(Protocol)]
+#[async_proto(internal)]
+struct TimeZoneProxy {
+    iana_name: String,
+}
+
+impl TryFrom<TimeZoneProxy> for TimeZone {
+    type Error = ReadErrorKind;
+
+    fn try_from(TimeZoneProxy { iana_name }: TimeZoneProxy) -> Result<Self, ReadErrorKind> {
+        Self::get(&iana_name).map_err(|e| ReadErrorKind::Custom(e.to_string()))
+    }
+}
+
+impl<'a> TryFrom<&'a TimeZone> for TimeZoneProxy {
+    type Error = WriteErrorKind;
+
+    fn try_from(tz: &TimeZone) -> Result<Self, WriteErrorKind> {
+        Ok(Self { iana_name: tz.iana_name().ok_or_else(|| WriteErrorKind::Custom(format!("attempted to serialize timezone with no IANA name")))?.to_owned() })
+    }
+}
+
+#[derive(Protocol)]
+#[async_proto(internal)]
+struct ZonedDateTimeProxy {
+    timezone: TimeZone,
+    timestamp: Timestamp,
+}
+
+impl From<ZonedDateTimeProxy> for ZonedDateTime {
+    fn from(ZonedDateTimeProxy { timezone, timestamp }: ZonedDateTimeProxy) -> Self {
+        Self::new(timestamp, timezone)
+    }
+}
+
+impl<'a> From<&'a ZonedDateTime> for ZonedDateTimeProxy {
+    fn from(zoned: &ZonedDateTime) -> Self {
+        Self {
+            timezone: zoned.time_zone().clone(),
+            timestamp: zoned.timestamp(),
+        }
+    }
+}
+
 impl_protocol_for! {
     #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "jiff")))))]
     #[async_proto(attr(doc = "Uses the same representation as `chrono::DateTime<Utc>`."))]
@@ -76,6 +123,16 @@ impl_protocol_for! {
     #[async_proto(attr(doc = "Uses the same representation as `chrono::NaiveDate`."))]
     #[async_proto(via = CivilDateProxy)]
     type civil::Date;
+
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "jiff")))))]
+    #[async_proto(attr(doc = "Must have an IANA name. Uses the same representation as `chrono_tz::Tz`."))]
+    #[async_proto(via = TimeZoneProxy)]
+    type TimeZone;
+
+    #[async_proto(attr(cfg_attr(docsrs, doc(cfg(feature = "jiff")))))]
+    #[async_proto(attr(doc = "Time zone must have an IANA name. Uses the same representation as `chrono::DateTime<chrono_tz::Tz>`."))]
+    #[async_proto(via = ZonedDateTimeProxy)]
+    type ZonedDateTime;
 }
 
 #[cfg(feature = "chrono")]
