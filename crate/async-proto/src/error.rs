@@ -3,6 +3,7 @@ use std::{
     convert::Infallible,
     io,
 };
+#[cfg(feature = "tokio-tungstenite021")] use tokio_tungstenite021::tungstenite as tungstenite021;
 #[cfg(feature = "tokio-tungstenite030")] use tokio_tungstenite030::tungstenite as tungstenite030;
 
 /// Specifies what went wrong while reading (receiving) a value.
@@ -27,6 +28,11 @@ pub enum ReadErrorKind {
         len: u64,
         max_len: u64,
     },
+    #[cfg(feature = "tokio-tungstenite021")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
+    /// Received a non-`Binary` WebSocket message (e.g. `Text` or `Ping`).
+    #[error("unexpected type of WebSocket message")]
+    MessageKind021(tungstenite021::Message),
     #[cfg(feature = "tokio-tungstenite030")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite030")))]
     /// Received a non-`Binary` WebSocket message (e.g. `Text` or `Ping`).
@@ -47,16 +53,23 @@ pub enum ReadErrorKind {
     UnknownVariant64(u64),
     #[error("unknown enum variant: {0}")]
     UnknownVariant128(u128),
+    #[cfg(feature = "tokio-tungstenite021")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
+    #[error("unexpected text message received from WebSocket: {0}")]
+    WebSocketTextMessage021(String),
     #[cfg(feature = "tokio-tungstenite030")]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite030"))))]
     #[error("unexpected text message received from WebSocket: {0}")]
     WebSocketTextMessage030(tungstenite030::Utf8Bytes),
     #[error(transparent)] Io(#[from] io::Error),
+    #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite030"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite030"))))]
+    #[error(transparent)] ParseInt(#[from] std::num::ParseIntError),
+    #[cfg(feature = "tokio-tungstenite021")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
+    #[error(transparent)] Tungstenite021(#[from] tungstenite021::Error),
     #[cfg(feature = "tokio-tungstenite030")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite030")))]
-    #[error(transparent)] ParseInt(#[from] std::num::ParseIntError),
-    #[cfg(feature = "tokio-tungstenite030")]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-tungstenite030"))))]
     #[error(transparent)] Tungstenite030(#[from] tungstenite030::Error),
     #[error(transparent)] Utf8(#[from] std::string::FromUtf8Error),
 }
@@ -96,9 +109,11 @@ impl From<ReadErrorKind> for io::Error {
         match e {
             ReadErrorKind::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::Io(e) => e,
+            #[cfg(feature = "tokio-tungstenite021")] ReadErrorKind::Tungstenite021(e) => io::Error::new(io::ErrorKind::Other, e),
             #[cfg(feature = "tokio-tungstenite030")] ReadErrorKind::Tungstenite030(e) => io::Error::new(io::ErrorKind::Other, e),
             ReadErrorKind::Utf8(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::EndOfStream => io::Error::new(io::ErrorKind::UnexpectedEof, e),
+            #[cfg(feature = "tokio-tungstenite021")] ReadErrorKind::WebSocketTextMessage021(ref msg) => io::Error::new(if msg.is_empty() { io::ErrorKind::UnexpectedEof } else { io::ErrorKind::InvalidData }, e),
             #[cfg(feature = "tokio-tungstenite030")] ReadErrorKind::WebSocketTextMessage030(ref msg) => io::Error::new(if msg.is_empty() { io::ErrorKind::UnexpectedEof } else { io::ErrorKind::InvalidData }, e),
             ReadErrorKind::FloatNotFinite |
             ReadErrorKind::MaxLen { .. } |
@@ -107,8 +122,9 @@ impl From<ReadErrorKind> for io::Error {
             ReadErrorKind::UnknownVariant32(_) |
             ReadErrorKind::UnknownVariant64(_) |
             ReadErrorKind::UnknownVariant128(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(feature = "tokio-tungstenite021")] ReadErrorKind::MessageKind021(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             #[cfg(feature = "tokio-tungstenite030")] ReadErrorKind::MessageKind030(_) => io::Error::new(io::ErrorKind::InvalidData, e),
-            #[cfg(feature = "tokio-tungstenite030")] ReadErrorKind::ParseInt(_) => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(any(feature = "tokio-tungstenite021", feature = "tokio-tungstenite030"))] ReadErrorKind::ParseInt(_) => io::Error::new(io::ErrorKind::InvalidData, e),
             ReadErrorKind::ReadNever => io::Error::new(io::ErrorKind::InvalidInput, e),
             ReadErrorKind::TryReserve(_) => io::Error::new(io::ErrorKind::OutOfMemory, e),
             ReadErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
@@ -148,6 +164,9 @@ pub enum WriteErrorKind {
         len: u64,
         max_len: u64,
     },
+    #[cfg(feature = "tokio-tungstenite021")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite021")))]
+    #[error(transparent)] Tungstenite021(#[from] tungstenite021::Error),
     #[cfg(feature = "tokio-tungstenite030")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio-tungstenite030")))]
     #[error(transparent)] Tungstenite030(#[from] tungstenite030::Error),
@@ -183,6 +202,7 @@ impl From<WriteErrorKind> for io::Error {
             WriteErrorKind::BufSize(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             WriteErrorKind::Io(e) => e,
             WriteErrorKind::MaxLen { .. } => io::Error::new(io::ErrorKind::InvalidData, e),
+            #[cfg(feature = "tokio-tungstenite021")] WriteErrorKind::Tungstenite021(e) => io::Error::new(io::ErrorKind::Other, e),
             #[cfg(feature = "tokio-tungstenite030")] WriteErrorKind::Tungstenite030(e) => io::Error::new(io::ErrorKind::Other, e),
             WriteErrorKind::Custom(_) => io::Error::new(io::ErrorKind::Other, e),
         }
@@ -222,9 +242,9 @@ pub enum ErrorContext {
         /// The context of the error returned from the message's `Protocol` implementation.
         source: Box<Self>,
     },
-    /// The error was produced by a sink returned from [`async_proto::websocket030`](crate::websocket030).
+    /// The error was produced by a sink returned from [`async_proto::websocket021`](crate::websocket021) or [`async_proto::websocket030`](crate::websocket030).
     WebSocketSink,
-    /// The error was produced by a stream returned from [`async_proto::websocket030`](crate::websocket030).
+    /// The error was produced by a stream returned from [`async_proto::websocket021`](crate::websocket021) or [`async_proto::websocket030`](crate::websocket030).
     WebSocketStream,
     /// The error was produced by the default implementation of a `Protocol` trait method.
     DefaultImpl,
